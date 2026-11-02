@@ -1,8 +1,8 @@
 # Paralelna simulacija navigacije gomile (Crowd Navigation)
 
-**Projekat iz predmeta Paralelni računarski sistemi** | Elektrotehnički fakultet Sarajevo | akademska 2026/27. godina
+> Projekat iz predmeta Paralelni računarski sistemi | Elektrotehnički fakultet Sarajevo | akademska 2026/27. godina
 
-Cilj projekta je implementirati simulaciju kretanja velikog broja agenata (lokalno izbjegavanje sudara uz pronalaženje susjeda pomoću prostorne mreže), a zatim je paralelizovati i optimizovati na **CPU-u (OpenMP)** i na **grafičkoj kartici (CUDA)**. Težište nije na vizuelnom kvalitetu simulacije, nego na **efikasnoj paralelizaciji, mjerenju ubrzanja i objašnjenju zašto ubrzanje nije idealno**.
+Cilj projekta je implementirati simulaciju kretanja velikog broja agenata (lokalno izbjegavanje sudara uz pronalaženje susjeda pomoću prostorne mreže), a zatim je paralelizovati i optimizovati na **CPU-u (OpenMP)** i na **grafičkoj kartici (CUDA)**. Težište nije na vizuelnom kvalitetu simulacije, nego na efikasnoj paralelizaciji, mjerenju ubrzanja i objašnjenju zašto ubrzanje nije idealno.
 
 ## Opis problema
 
@@ -42,7 +42,7 @@ Folder `docs/` sadrži naučne radove, bilješke i linkove relevantne za projeka
 
 ## Model kretanja
 
-Model kretanja računa novu brzinu agenta iz cilja, susjeda i prepreka. **Isti model koristi se u sekvencijalnoj, OpenMP i CUDA verziji**, jer bi se u suprotnom ubrzanje od paralelizacije miješalo sa razlikom u količini posla, a ispravnost se ne bi mogla provjeriti poređenjem rezultata. Mijenja se samo implementacija prilagođena hardveru, ne matematika.
+Model kretanja računa novu brzinu agenta iz cilja, susjeda i prepreka. Isti model koristi se u sekvencijalnoj, OpenMP i CUDA verziji, jer bi se u suprotnom ubrzanje od paralelizacije miješalo sa razlikom u količini posla, a ispravnost se ne bi mogla provjeriti poređenjem rezultata. Mijenja se samo implementacija prilagođena hardveru, ne matematika.
 
 | | Social Force (Helbing) | ORCA (van den Berg et al.) |
 |---|---|---|
@@ -51,9 +51,7 @@ Model kretanja računa novu brzinu agenta iz cilja, susjeda i prepreka. **Isti m
 | Implementacija | jednostavnija | složenija (LP, prepreke kao segmenti, nemogući slučajevi) |
 | Posao po agentu | zavisi od broja susjeda | zavisi od broja susjeda i grananja u LP-u |
 
-**Radna pretpostavka:** Social Force kao glavni model, uz ORCA-u kao moguće proširenje. Konačna odluka bilježi se ovdje nakon konsultacija sa asistentom.
-
-Funkcija koja računa novu brzinu je izdvojena, tako da se model može zamijeniti bez izmjene prostorne mreže, mjernog okvira i paralelizacije.
+**Radna pretpostavka:** Social Force kao glavni model, uz ORCA-u kao moguće proširenje.
 
 ## Inicijalni plan implementacije
  
@@ -118,17 +116,6 @@ Metrike:
 Ubrzanje paralelne verzije sa mrežom mjeri se u odnosu na **sekvencijalnu verziju sa mrežom**, kako bi se razdvojio doprinos paralelizacije od doprinosa same prostorne strukture.
 
 Mjerenja se ponavljaju više puta, uz zagrijavanje, a uzima se medijan. Mjeri se samo simulacija (bez vizualizacije i učitavanja podataka).
-
-## Tok rada
-
-Svaki korak se testira prije prelaska na sljedeći. Razvoj i testiranje počinju na malim skupovima, a konačna mjerenja izvode se na velikim.
-
-1. Priprema repozitorija, mjernog okvira i generatora scenarija.
-2. Sekvencijalna verzija (naivna, zatim mreža), testovi, referentni izlaz.
-3. Osnovna vizualizacija.
-4. OpenMP verzija, mjerenja i optimizacije.
-5. CUDA verzija, profilisanje i optimizacije.
-6. Završna mjerenja, grafikoni i izvještaj.
 
 ## Izgradnja i pokretanje
 
