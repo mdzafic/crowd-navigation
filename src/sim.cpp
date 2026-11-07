@@ -9,7 +9,8 @@ namespace crowd
           grid_(world, p.interaction_radius(), cur_.size()),
           neighbor_ids_(cur_.size() * p.max_neighbors, -1),
           neighbor_distances_(cur_.size() * p.max_neighbors, 0.f),
-          neighbor_counts_(cur_.size(), 0)
+          neighbor_counts_(cur_.size(), 0),
+          orca_line_buffers_(cur_.size() * p.max_neighbors * 2)
     {
         next_ = cur_;
     }
@@ -34,13 +35,12 @@ namespace crowd
         count = new_count;
     }
 
-    // PRIVREMENI kretac: brzina = smjer prema cilju * vmax. Nema izbjegavanja
-    // sudara, agenti prolaze jedni kroz druge. Zamijeniti ORCA-om u Fazi 5.
     void Sim::step()
     {
         const std::size_t n = cur_.size();
         const float dt = p_.dt;
         const float vmax = p_.v_max;
+        const std::size_t line_buffer_stride = p_.max_neighbors * 2;
 
         grid_.build(cur_.x.data(), cur_.y.data(), n);
         for (std::size_t i = 0; i < n; ++i)
@@ -58,24 +58,41 @@ namespace crowd
                                     });
             neighbor_counts_[i] = count;
 
-            const float dx = cur_.gx[i] - cur_.x[i];
-            const float dy = cur_.gy[i] - cur_.y[i];
-            const float d2 = dx * dx + dy * dy;
-            const float step_len = vmax * dt;
-
-            float vx = 0.f, vy = 0.f;
-            if (d2 > step_len * step_len)
+            float vx, vy;
+            if (p_.enable_orca)
             {
-                const float inv = vmax / std::sqrt(d2);
-                vx = dx * inv;
-                vy = dy * inv;
+                Line* line_buffer = count == 0 ? nullptr :
+                    orca_line_buffers_.data() + i * line_buffer_stride;
+                const Vec2 velocity = computeNewVelocity(
+                    static_cast<int>(i), cur_, ids, static_cast<int>(count), line_buffer, p_);
+                vx = velocity.x;
+                vy = velocity.y;
                 next_.x[i] = cur_.x[i] + vx * dt;
                 next_.y[i] = cur_.y[i] + vy * dt;
             }
-            else // dovoljno blizu: stani tacno na cilj
+            else
             {
-                next_.x[i] = cur_.gx[i];
-                next_.y[i] = cur_.gy[i];
+                const float dx = cur_.gx[i] - cur_.x[i];
+                const float dy = cur_.gy[i] - cur_.y[i];
+                const float distance2 = dx * dx + dy * dy;
+                const float stepLength = vmax * dt;
+                vx = 0.f;
+                vy = 0.f;
+                if (distance2 > stepLength * stepLength)
+                {
+                    const float inverseDistance = vmax / std::sqrt(distance2);
+                    vx = dx * inverseDistance;
+                    vy = dy * inverseDistance;
+                    next_.x[i] = cur_.x[i] + vx * dt;
+                    next_.y[i] = cur_.y[i] + vy * dt;
+                }
+                else
+                {
+                    vx = 0.f;
+                    vy = 0.f;
+                    next_.x[i] = cur_.gx[i];
+                    next_.y[i] = cur_.gy[i];
+                }
             }
             next_.vx[i] = vx;
             next_.vy[i] = vy;

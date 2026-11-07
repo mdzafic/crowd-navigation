@@ -6,6 +6,26 @@
 
 int main()
 {
+    crowd::Params single_agent_params;
+    crowd::Agents single_agent;
+    single_agent.resize(1);
+    single_agent.x[0] = 0.f;
+    single_agent.y[0] = 0.f;
+    single_agent.gx[0] = 10.f;
+    single_agent.gy[0] = 0.f;
+    const crowd::World single_agent_world{-10.f, -10.f, 10.f, 10.f};
+    crowd::Sim single_agent_sim(single_agent, single_agent_world, single_agent_params);
+    single_agent_sim.step();
+    const crowd::Agents& single_agent_state = single_agent_sim.state();
+    if (std::fabs(single_agent_state.vx[0] - single_agent_params.v_max) > 1.0e-5f ||
+        std::fabs(single_agent_state.vy[0]) > 1.0e-5f ||
+        std::fabs(single_agent_state.x[0] - single_agent_params.v_max * single_agent_params.dt) > 1.0e-5f ||
+        std::fabs(single_agent_state.y[0]) > 1.0e-5f)
+    {
+        std::puts("FAIL: single agent with ORCA should move directly toward its goal");
+        return 1;
+    }
+
     crowd::Params p;
     p.max_neighbors = 10;
     const crowd::Scenario scenario = crowd::make_antipodal_disk(200, p, 0.6f);

@@ -4,13 +4,12 @@
 #include <vector>
 #include "agents.hpp"
 #include "grid.hpp"
+#include "orca.hpp"
 #include "params.hpp"
 
 namespace crowd
 {
     // Tanak interfejs izmedju simulacije i vizualizatora.
-    // Vizualizator vidi samo state() i step(); kasnije se interno
-    // zamijeni privremeni kretac pravom ORCA-om bez izmjena u vizualizaciji.
     class Sim
     {
     public:
@@ -33,6 +32,7 @@ namespace crowd
         std::vector<std::int32_t> neighbor_ids_;
         std::vector<float> neighbor_distances_;
         std::vector<std::size_t> neighbor_counts_;
+        std::vector<Line> orca_line_buffers_;
         std::size_t steps_ = 0;
     };
 }

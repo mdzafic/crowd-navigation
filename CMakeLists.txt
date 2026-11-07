@@ -16,6 +16,7 @@ option(CROWD_OPENMP "Linkaj OpenMP (za kasnije faze)" ON)
 add_library(crowd STATIC
   src/scenario.cpp
   src/grid.cpp
+  src/orca.cpp
   src/sim.cpp
 )
 target_include_directories(crowd PUBLIC include)
@@ -43,6 +44,10 @@ add_test(NAME grid_vs_bruteforce COMMAND test_grid)
 add_executable(test_sim tests/test_sim.cpp)
 target_link_libraries(test_sim PRIVATE crowd)
 add_test(NAME sim_neighbors COMMAND test_sim)
+
+add_executable(test_orca tests/test_orca.cpp)
+target_link_libraries(test_orca PRIVATE crowd)
+add_test(NAME orca_velocity COMMAND test_orca)
 
 option(CROWD_VIZ "Gradi vizualizator (raylib)" ON)
 if(CROWD_VIZ)
