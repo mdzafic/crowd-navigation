@@ -126,10 +126,9 @@ namespace crowd
                 const Vec2 optVelocity{-lines[i].direction.y, lines[i].direction.x};
                 const int failedLine = linearProgram2(projectedLines, projectedCount, radius,
                                                       optVelocity, true, result);
-                if (static_cast<float>(failedLine) < distance)
+                if (failedLine < projectedCount)
                     result = previousResult;
-                else
-                    distance = det(lines[i].direction, lines[i].point - result);
+                distance = det(lines[i].direction, lines[i].point - result);
             }
         }
     }

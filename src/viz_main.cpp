@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <string>
+#include "metrics.hpp"
 #include "raylib.h"
 #include "sim.hpp"
 #include "scenario.hpp"
@@ -93,13 +94,12 @@ int main(int argc, char** argv)
         }
         EndMode2D();
 
-        DrawText(TextFormat("N=%zu  korak=%zu  na cilju=%zu  korak/frame=%d  %s",
-                            a.size(), sim.steps(), sim.reached(),
-                            steps_per_frame, paused ? "[PAUZA]" : ""),
+        DrawText(TextFormat("N=%zu  preklapanja=%zu  min udaljenost=%.2f  na cilju=%zu  FPS=%d",
+                            a.size(), overlapCount(a, p.radius), minPairDistance(a),
+                            goalReachedCount(a, 0.25f), GetFPS()),
                  10, 10, 20, RAYWHITE);
         DrawText("SPACE pauza | RIGHT korak | UP/DOWN brzina | G ciljevi | R reset | HOME kamera | tocak zoom | LMB pan",
                  10, H - 24, 16, GRAY);
-        DrawFPS(W - 90, 10);
         EndDrawing();
     }
     CloseWindow();
