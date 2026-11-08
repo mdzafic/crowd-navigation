@@ -9,6 +9,12 @@
 
 namespace crowd
 {
+    // Vrijeme faza jednog koraka (ms); popunjava se samo ako je zadan pokazivac.
+    struct StepTimes
+    {
+        double grid_ms = 0, topk_ms = 0, orca_ms = 0;
+    };
+
     // Tanak interfejs izmedju simulacije i vizualizatora.
     class Sim
     {
@@ -16,7 +22,7 @@ namespace crowd
         Sim(Agents initial, World world, const Params& p);
 
         const Agents& state() const noexcept { return cur_; }
-        void step();                          // jedan korak od p.dt
+        void step(StepTimes* times = nullptr);   // jedan korak od p.dt
         std::size_t steps() const noexcept { return steps_; }
         std::size_t reached() const noexcept; // broj agenata na cilju
         std::size_t neighbor_count(std::size_t i) const noexcept { return neighbor_counts_[i]; }
