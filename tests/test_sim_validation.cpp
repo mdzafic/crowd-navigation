@@ -61,6 +61,31 @@ static void testCrowd(std::size_t n, int max_steps)
     CHECK(r.reached * 100 >= n * 98);                   // najmanje 98 % agenata stiglo
 }
 
+static void testVelocityNeverExceedsMax()
+{
+    std::printf("Provjera maksimalne brzine agenata\n");
+
+    Params p;
+    Scenario sc = make_antipodal_disk(10, p);
+    Sim sim(sc.agents, sc.world, p);
+
+    for (int step = 0; step < 100; ++step)
+        sim.step();
+
+    const Agents& a = sim.state();
+
+    for (std::size_t i = 0; i < a.size(); ++i)
+    {
+        float v = std::sqrt(
+            a.vx[i] * a.vx[i] +
+            a.vy[i] * a.vy[i]
+        );
+
+        CHECK(v <= p.v_max + 1e-4f);
+    }
+}
+
+
 static void testTopK(std::size_t n, int max_steps)
 {
     std::printf("Utjecaj top-k, N=%zu\n", n);
@@ -91,7 +116,7 @@ int main()
     testCrowd(500, 3000);
     testTopK(200, 2000);
     testDeterminism(200, 300);
-
+    testVelocityNeverExceedsMax();
     if (g_failures == 0) std::printf("\nSVI TESTOVI PROSLI\n");
     else                 std::printf("\nNEUSPJELO: %d provjera\n", g_failures);
     return g_failures == 0 ? 0 : 1;
