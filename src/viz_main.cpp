@@ -18,12 +18,26 @@ static Color color_for_goal(float x, float y, float gx, float gy)
     return ColorFromHSV(hue, 0.75f, 0.95f);
 }
 
+// Scenarij kao Test 1: dva agenta licem u lice (blagi pomak po y razbija savršenu simetriju)
+static Scenario make_head_on(const Params& p, float y_offset)
+{
+    Scenario sc = make_antipodal_disk(2, p);  // koristimo ga samo kao okvir (world, struktura)
+    sc.agents.x[0] = -5.f; sc.agents.y[0] = 0.f;
+    sc.agents.gx[0] = 5.f; sc.agents.gy[0] = 0.f;
+    sc.agents.x[1] = 5.f;  sc.agents.y[1] = y_offset;
+    sc.agents.gx[1] = -5.f; sc.agents.gy[1] = y_offset;
+    sc.agents.vx[0] = p.v_max;  sc.agents.vy[0] = 0.f;
+    sc.agents.vx[1] = -p.v_max; sc.agents.vy[1] = 0.f;
+    return sc;
+}
+
 int main(int argc, char** argv)
 {
-    std::size_t n = (argc > 1) ? std::strtoull(argv[1], nullptr, 10) : 500;
-
     Params p;
-    const Scenario sc = make_antipodal_disk(n, p);
+    const bool head_on = (argc > 1 && std::string(argv[1]) == "headon");
+    const std::size_t n = head_on ? 2
+        : (argc > 1) ? std::strtoull(argv[1], nullptr, 10) : 500;
+    const Scenario sc = head_on ? make_head_on(p, 0.0f) : make_antipodal_disk(n, p);
     Sim sim(sc.agents, sc.world, p);
 
     const int W = 1280, H = 800;
