@@ -19,6 +19,7 @@ add_library(crowd STATIC
   src/metrics.cpp
   src/orca.cpp
   src/sim.cpp
+  src/map.cpp
 )
 target_include_directories(crowd PUBLIC include)
 target_compile_options(crowd PUBLIC -Wall -Wextra -Wpedantic)
@@ -58,6 +59,10 @@ add_test(NAME orca_validation COMMAND test_validation)
 add_executable(test_sim_validation tests/test_sim_validation.cpp)
 target_link_libraries(test_sim_validation PRIVATE crowd)
 add_test(NAME sim_validation COMMAND test_sim_validation)
+
+add_executable(test_map tests/test_map.cpp)
+target_link_libraries(test_map PRIVATE crowd)
+add_test(NAME map_parsing COMMAND test_map)
 
 option(CROWD_VIZ "Gradi vizualizator (raylib)" ON)
 if(CROWD_VIZ)
