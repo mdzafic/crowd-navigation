@@ -126,10 +126,9 @@ namespace crowd
                 const Vec2 optVelocity{-lines[i].direction.y, lines[i].direction.x};
                 const int failedLine = linearProgram2(projectedLines, projectedCount, radius,
                                                       optVelocity, true, result);
-                if (static_cast<float>(failedLine) < distance)
+                if (failedLine < projectedCount)
                     result = previousResult;
-                else
-                    distance = det(lines[i].direction, lines[i].point - result);
+                distance = det(lines[i].direction, lines[i].point - result);
             }
         }
     }
@@ -197,6 +196,13 @@ namespace crowd
 
         if (neighborCount <= 0)
             return preferredVelocity;
+
+        //rotacija �eljene brzine za 0.02 rad dovoljno razbija simetriju da se mimoilaze
+        constexpr float kSymmetryAngle = 0.02f; // radijani, po potrebi 0.02-0.05
+        const float c = std::cos(kSymmetryAngle);
+        const float s = std::sin(kSymmetryAngle);
+        preferredVelocity = { c * preferredVelocity.x - s * preferredVelocity.y,
+              s * preferredVelocity.x + c * preferredVelocity.y };
 
         for (int i = 0; i < neighborCount; ++i)
         {
