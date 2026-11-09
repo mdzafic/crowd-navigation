@@ -3,6 +3,7 @@
 #include <cstdint>
 #include "agents.hpp"
 #include "params.hpp"
+#include "map.hpp"
 
 namespace crowd
 {
@@ -24,4 +25,9 @@ namespace crowd
     Scenario make_antipodal_disk(std::size_t n, const Params& p,
                                  float spacing = 1.2f,
                                  std::uint64_t seed = 42);
+
+                                 // Startovi i ciljevi na razlièitim slobodnim æelijama mape.
+    // n == 1: koristi prvu S i prvu G æeliju (test ugla).
+    Scenario make_map_scenario(const Map& m, std::size_t n, const Params& p,
+                               std::uint64_t seed = 42);
 }

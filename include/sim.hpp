@@ -6,6 +6,8 @@
 #include "grid.hpp"
 #include "orca.hpp"
 #include "params.hpp"
+#include "navfield.hpp"
+#include "map.hpp"
 
 namespace crowd
 {
@@ -30,6 +32,10 @@ namespace crowd
         {
             return neighbor_ids_.data() + i * p_.max_neighbors;
         }
+        Sim(Agents initial, World world, const Params& p, const Map* map);  // novi konstruktor
+
+        const NavFields& nav() const noexcept { return nav_; }
+        int agent_field(std::size_t i) const noexcept { return agent_field_[i]; }
 
     private:
         Params p_;
@@ -40,5 +46,9 @@ namespace crowd
         std::vector<std::size_t> neighbor_counts_;
         std::vector<Line> orca_line_buffers_;
         std::size_t steps_ = 0;
+        const Map* map_ = nullptr;
+        NavFields nav_;
+        std::vector<int> agent_field_;
+        std::vector<float> goal_x_, goal_y_;   // pravi ciljevi (cur_.gx se u koraku privremeno mijenja)
     };
 }

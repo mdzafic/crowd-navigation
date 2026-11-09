@@ -20,6 +20,7 @@ add_library(crowd STATIC
   src/orca.cpp
   src/sim.cpp
   src/map.cpp
+  src/navfield.cpp
 )
 target_include_directories(crowd PUBLIC include)
 target_compile_options(crowd PUBLIC -Wall -Wextra -Wpedantic)

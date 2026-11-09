@@ -48,4 +48,42 @@ namespace crowd
         s.world = {-L, -L, L, L};
         return s;
     }
+    Scenario make_map_scenario(const Map& m, std::size_t n, const Params& p, std::uint64_t seed)
+    {
+        std::vector<int> free_cells;
+        for (int i = 0; i < m.w * m.h; ++i)
+            if (!m.wall[i]) free_cells.push_back(i);
+        n = std::min(n, free_cells.size());
+
+        std::mt19937_64 rng(seed);
+        auto shuffle = [&](std::vector<int>& v) {   // ruèni Fisher-Yates: isti rezultat na svim kompajlerima
+            for (std::size_t i = v.size(); i > 1; --i)
+                std::swap(v[i - 1], v[rng() % i]);
+        };
+        std::vector<int> starts = free_cells, goals = free_cells;
+        shuffle(starts);
+        shuffle(goals);
+
+        if (n == 1)
+        {
+            for (int i = 0; i < m.w * m.h; ++i) if (m.spawn[i]) { starts[0] = i; break; }
+            for (int i = 0; i < m.w * m.h; ++i) if (m.goal[i])  { goals[0]  = i; break; }
+        }
+
+        Scenario s;
+        s.agents.resize(n);
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            const int sc = starts[i];
+            int gc = goals[i];
+            if (gc == sc) gc = goals[(i + 1) % goals.size()];
+            s.agents.x[i]  = (sc % m.w + 0.5f) * m.cell;
+            s.agents.y[i]  = (sc / m.w + 0.5f) * m.cell;
+            s.agents.gx[i] = (gc % m.w + 0.5f) * m.cell;
+            s.agents.gy[i] = (gc / m.w + 0.5f) * m.cell;
+        }
+        const float R = p.interaction_radius();
+        s.world = {-R, -R, m.widthWorld() + R, m.heightWorld() + R};
+        return s;
+    }
 }
