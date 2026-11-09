@@ -197,7 +197,7 @@ namespace crowd
         if (neighborCount <= 0)
             return preferredVelocity;
 
-        //rotacija ï¿½eljene brzine za 0.02 rad dovoljno razbija simetriju da se mimoilaze
+        //rotacija željene brzine za 0.02 rad dovoljno razbija simetriju da se mimoilaze
         constexpr float kSymmetryAngle = 0.02f; // radijani, po potrebi 0.02-0.05
         const float c = std::cos(kSymmetryAngle);
         const float s = std::sin(kSymmetryAngle);

@@ -1,6 +1,7 @@
 #include "sim.hpp"
 #include <cmath>
 #include <utility>
+#include <chrono>
 
 namespace crowd
 {
@@ -35,28 +36,45 @@ namespace crowd
         count = new_count;
     }
 
-    void Sim::step()
+    void Sim::step(StepTimes* times)
     {
+        using clk = std::chrono::steady_clock;
+        auto ms = [](clk::time_point a, clk::time_point b) {
+            return std::chrono::duration<double, std::milli>(b - a).count();
+            };
+
         const std::size_t n = cur_.size();
         const float dt = p_.dt;
         const float vmax = p_.v_max;
         const std::size_t line_buffer_stride = p_.max_neighbors * 2;
 
+        const auto t0 = clk::now();
         grid_.build(cur_.x.data(), cur_.y.data(), n);
+        const auto t1 = clk::now();
+
+        // Faza 2: top-k susjedi
         for (std::size_t i = 0; i < n; ++i)
         {
             std::int32_t* ids = neighbor_ids_.data() + i * p_.max_neighbors;
             float* distances = neighbor_distances_.data() + i * p_.max_neighbors;
             std::size_t count = 0;
             grid_.for_each_neighbor(i, cur_.x.data(), cur_.y.data(), p_.interaction_radius(),
-                                    [&](std::int32_t j) {
-                                        const float dx = cur_.x[j] - cur_.x[i];
-                                        const float dy = cur_.y[j] - cur_.y[i];
-                                        insert_neighbor(j, dx * dx + dy * dy,
-                                                        ids, distances, count,
-                                                        p_.max_neighbors);
-                                    });
+                [&](std::int32_t j) {
+                    const float dx = cur_.x[j] - cur_.x[i];
+                    const float dy = cur_.y[j] - cur_.y[i];
+                    insert_neighbor(j, dx * dx + dy * dy,
+                        ids, distances, count,
+                        p_.max_neighbors);
+                });
             neighbor_counts_[i] = count;
+        }
+        const auto t2 = clk::now();
+
+        // Faza 3: ORCA + pomak
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            const std::size_t count = neighbor_counts_[i];
+            const std::int32_t* ids = neighbor_ids_.data() + i * p_.max_neighbors;
 
             float vx, vy;
             if (p_.enable_orca)
@@ -88,8 +106,6 @@ namespace crowd
                 }
                 else
                 {
-                    vx = 0.f;
-                    vy = 0.f;
                     next_.x[i] = cur_.gx[i];
                     next_.y[i] = cur_.gy[i];
                 }
@@ -99,8 +115,17 @@ namespace crowd
             next_.gx[i] = cur_.gx[i];
             next_.gy[i] = cur_.gy[i];
         }
-        std::swap(cur_, next_);   // vektori se zamijene u O(1)
+        const auto t3 = clk::now();
+
+        std::swap(cur_, next_);
         ++steps_;
+
+        if (times)
+        {
+            times->grid_ms = ms(t0, t1);
+            times->topk_ms = ms(t1, t2);
+            times->orca_ms = ms(t2, t3);
+        }
     }
 
     std::size_t Sim::reached() const noexcept
