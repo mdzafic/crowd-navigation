@@ -27,6 +27,7 @@ namespace crowd
 
         bool isWall(int cx, int cy) const noexcept;     // izvan mape = zid
         bool blocked(float x, float y) const noexcept;  // koordinate -> æelija
+        bool blocked(float x, float y, float r) const noexcept;  // krug radijusa r sijeèe zid
 
         float widthWorld()  const noexcept { return static_cast<float>(w) * cell; }
         float heightWorld() const noexcept { return static_cast<float>(h) * cell; }

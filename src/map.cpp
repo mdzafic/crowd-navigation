@@ -18,6 +18,23 @@ namespace crowd
         return isWall(static_cast<int>(std::floor(x / cell)),
                       static_cast<int>(std::floor(y / cell)));
     }
+    bool Map::blocked(float x, float y, float r) const noexcept
+    {
+        const int x0 = static_cast<int>(std::floor((x - r) / cell));
+        const int x1 = static_cast<int>(std::floor((x + r) / cell));
+        const int y0 = static_cast<int>(std::floor((y - r) / cell));
+        const int y1 = static_cast<int>(std::floor((y + r) / cell));
+        for (int cy = y0; cy <= y1; ++cy)
+            for (int cx = x0; cx <= x1; ++cx)
+            {
+                if (!isWall(cx, cy)) continue;
+                const float qx = std::fmin(std::fmax(x, cx * cell), (cx + 1) * cell);
+                const float qy = std::fmin(std::fmax(y, cy * cell), (cy + 1) * cell);
+                const float dx = x - qx, dy = y - qy;
+                if (dx * dx + dy * dy < r * r) return true;
+            }
+        return false;
+    }
 
     namespace
     {

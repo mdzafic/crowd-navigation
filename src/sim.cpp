@@ -15,6 +15,15 @@ namespace crowd
     {
         next_ = cur_;
     }
+    Sim::Sim(Agents initial, World world, const Params& p, const Map* map)
+    : Sim(std::move(initial), world, p)
+    {
+        if (!map) return;
+        map_ = map;
+        goal_x_ = cur_.gx;
+        goal_y_ = cur_.gy;
+        agent_field_ = nav_.build(*map_, goal_x_, goal_y_, p_.radius);
+    }
 
     static void insert_neighbor(std::int32_t id, float distance2,
                                 std::int32_t* ids, float* distances,
@@ -76,6 +85,26 @@ namespace crowd
             const std::size_t count = neighbor_counts_[i];
             const std::int32_t* ids = neighbor_ids_.data() + i * p_.max_neighbors;
 
+            if (map_)
+            {
+                const float cell = map_->cell;
+                const int cx = static_cast<int>(std::floor(cur_.x[i] / cell));
+                const int cy = static_cast<int>(std::floor(cur_.y[i] / cell));
+                const NavField& f = nav_.at(agent_field_[i]);
+                const float look = 3.f * vmax * dt;
+                float ox, oy;
+                if (cy * map_->w + cx == f.goal_cell || !f.sample(cur_.x[i], cur_.y[i], ox, oy))
+                {
+                    cur_.gx[i] = goal_x_[i];                 // u ciljnoj æeliji: ravno na cilj
+                    cur_.gy[i] = goal_y_[i];
+                }
+                else
+                {
+                    cur_.gx[i] = cur_.x[i] + ox * look;      // waypoint iz polja
+                    cur_.gy[i] = cur_.y[i] + oy * look;
+                }
+            }
+
             float vx, vy;
             if (p_.enable_orca)
             {
@@ -110,10 +139,20 @@ namespace crowd
                     next_.y[i] = cur_.gy[i];
                 }
             }
+            if (map_)   // klizanje: odbaci komponentu pomaka koja ulazi u zid
+            {
+                const float wr = 0.9f * p_.radius;
+                const float ox = cur_.x[i], oy = cur_.y[i];
+                float nx = ox, ny = oy;
+                if (!map_->blocked(next_.x[i], oy, wr)) nx = next_.x[i];
+                if (!map_->blocked(nx, next_.y[i], wr)) ny = next_.y[i];
+                next_.x[i] = nx; next_.y[i] = ny;
+                vx = (nx - ox) / dt;  vy = (ny - oy) / dt;   // stvarna brzina za susjede
+            }
             next_.vx[i] = vx;
             next_.vy[i] = vy;
-            next_.gx[i] = cur_.gx[i];
-            next_.gy[i] = cur_.gy[i];
+            next_.gx[i] = map_ ? goal_x_[i] : cur_.gx[i];
+            next_.gy[i] = map_ ? goal_y_[i] : cur_.gy[i];
         }
         const auto t3 = clk::now();
 
