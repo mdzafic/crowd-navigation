@@ -50,5 +50,6 @@ namespace crowd
         NavFields nav_;
         std::vector<int> agent_field_;
         std::vector<float> goal_x_, goal_y_;   // pravi ciljevi (cur_.gx se u koraku privremeno mijenja)
+        std::size_t line_stride_ = 0;
     };
 }

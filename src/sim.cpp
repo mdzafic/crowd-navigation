@@ -14,12 +14,15 @@ namespace crowd
           orca_line_buffers_(cur_.size() * p.max_neighbors * 2)
     {
         next_ = cur_;
+        line_stride_ = p.max_neighbors * 2;
     }
     Sim::Sim(Agents initial, World world, const Params& p, const Map* map)
     : Sim(std::move(initial), world, p)
     {
         if (!map) return;
         map_ = map;
+        line_stride_ = 2 * (static_cast<std::size_t>(kMaxWallLines) + p_.max_neighbors);
+        orca_line_buffers_.assign(cur_.size() * line_stride_, Line{});
         goal_x_ = cur_.gx;
         goal_y_ = cur_.gy;
         agent_field_ = nav_.build(*map_, goal_x_, goal_y_, p_.radius);
@@ -55,7 +58,7 @@ namespace crowd
         const std::size_t n = cur_.size();
         const float dt = p_.dt;
         const float vmax = p_.v_max;
-        const std::size_t line_buffer_stride = p_.max_neighbors * 2;
+        const std::size_t line_buffer_stride = line_stride_;
 
         const auto t0 = clk::now();
         grid_.build(cur_.x.data(), cur_.y.data(), n);
@@ -108,10 +111,10 @@ namespace crowd
             float vx, vy;
             if (p_.enable_orca)
             {
-                Line* line_buffer = count == 0 ? nullptr :
-                    orca_line_buffers_.data() + i * line_buffer_stride;
+                Line* line_buffer = (map_ || count > 0)
+                    ? orca_line_buffers_.data() + i * line_buffer_stride : nullptr;
                 const Vec2 velocity = computeNewVelocity(
-                    static_cast<int>(i), cur_, ids, static_cast<int>(count), line_buffer, p_);
+                        static_cast<int>(i), cur_, ids, static_cast<int>(count), line_buffer, p_, map_);
                 vx = velocity.x;
                 vy = velocity.y;
                 next_.x[i] = cur_.x[i] + vx * dt;
@@ -141,7 +144,7 @@ namespace crowd
             }
             if (map_)   // klizanje: odbaci komponentu pomaka koja ulazi u zid
             {
-                const float wr = 0.9f * p_.radius;
+                const float wr = kWallRadiusFactor * p_.radius;
                 const float ox = cur_.x[i], oy = cur_.y[i];
                 float nx = ox, ny = oy;
                 if (!map_->blocked(next_.x[i], oy, wr)) nx = next_.x[i];

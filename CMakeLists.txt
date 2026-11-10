@@ -65,6 +65,11 @@ add_executable(test_map tests/test_map.cpp)
 target_link_libraries(test_map PRIVATE crowd)
 add_test(NAME map_parsing COMMAND test_map)
 
+add_executable(test_walls tests/test_walls.cpp)
+target_link_libraries(test_walls PRIVATE crowd)
+add_test(NAME orca_walls COMMAND test_walls
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 option(CROWD_VIZ "Gradi vizualizator (raylib)" ON)
 if(CROWD_VIZ)
   include(FetchContent)
