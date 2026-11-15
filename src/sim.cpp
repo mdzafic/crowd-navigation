@@ -84,36 +84,55 @@ namespace crowd
         grid_.build(cur_.x.data(), cur_.y.data(), n);
         const auto t1 = clk::now();
 
-        // Faza 2: top-k susjedi
+
+        // Lokalni baferi kandidata (alociraju se jednom po koraku, ne po agentu).
+// Ne smiju biti static/thread_local ako kasnije paraleliziramo.
+        std::vector<std::int32_t> cand_id(512);
+        std::vector<float> cand_d2(512);
+        const float rad = p_.interaction_radius();
+        const float r2 = rad * rad;
+        const float* px = cur_.x.data();
+        const float* py = cur_.y.data();
+
         for (std::size_t i = 0; i < n; ++i)
         {
             std::int32_t* ids = neighbor_ids_.data() + i * p_.max_neighbors;
             float* distances = neighbor_distances_.data() + i * p_.max_neighbors;
+            const float xi = px[i], yi = py[i];
             std::size_t count = 0;
+            std::size_t m = 0;
 
 #ifdef CROWD_DIAG
-            grid_.for_each_candidate(cur_.x[i], cur_.y[i],
-                [&](std::int32_t) {
-                    ++g_cand;
-                });
+            grid_.for_each_candidate(xi, yi, [&](std::int32_t) { ++g_cand; });
 #endif
 
-            grid_.for_each_neighbor(i, cur_.x.data(), cur_.y.data(),
-                p_.interaction_radius(),
-                [&](std::int32_t j) {
-                    const float dx = cur_.x[j] - cur_.x[i];
-                    const float dy = cur_.y[j] - cur_.y[i];
+            // 1) Kandidati: d2 racunamo za sve, upisujemo uvijek,
+            //    a brojac m povecavamo maskom (bez grananja).
+            grid_.for_each_candidate(xi, yi, [&](std::int32_t j) {
+                if (m + 1 >= cand_id.size())          // rijetko i predvidivo
+                {
+                    cand_id.resize(cand_id.size() * 2);
+                    cand_d2.resize(cand_d2.size() * 2);
+                }
+                const float dx = px[j] - xi, dy = py[j] - yi;
+                const float d2 = dx * dx + dy * dy;
+                cand_id[m] = j;
+                cand_d2[m] = d2;
+                m += static_cast<std::size_t>(
+                    (d2 <= r2) & (static_cast<std::size_t>(j) != i));
+                });
 
-                    [[maybe_unused]] const bool ins = insert_neighbor(
-                        j, dx * dx + dy * dy,
-                        ids, distances, count,
-                        p_.max_neighbors);
-
+            // 2) Umetanje u sortirani top-k (isti redoslijed kao prije).
+            for (std::size_t c = 0; c < m; ++c)
+            {
+                [[maybe_unused]] const bool ins = insert_neighbor(
+                    cand_id[c], cand_d2[c],
+                    ids, distances, count, p_.max_neighbors);
 #ifdef CROWD_DIAG
-                    ++g_inradius;
-                    g_inserted += ins;
+                ++g_inradius;
+                g_inserted += ins;
 #endif
-                });
+            }
 
             neighbor_counts_[i] = count;
         }

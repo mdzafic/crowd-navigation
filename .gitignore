@@ -1,2 +1,4 @@
 build/
 .vs/
+build-prof/
+build-diag/
