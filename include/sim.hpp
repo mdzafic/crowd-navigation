@@ -44,6 +44,7 @@ namespace crowd
         std::vector<std::int32_t> neighbor_ids_;
         std::vector<float> neighbor_distances_;
         std::vector<std::size_t> neighbor_counts_;
+        std::vector<Line> wall_lines_;
         std::vector<Line> orca_line_buffers_;
         std::size_t steps_ = 0;
         const Map* map_ = nullptr;

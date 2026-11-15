@@ -102,6 +102,27 @@ int main()
         return 1;
     }
 
+    // Test 5: Static wall constraint
+    agents.resize(1);
+    agents.x[0] = 0.0f;
+    agents.y[0] = 0.0f;
+    agents.vx[0] = 0.0f;
+    agents.vy[0] = 0.0f;
+    agents.gx[0] = 10.0f;
+    agents.gy[0] = 0.0f;
+    const Line wall = makeWallOrcaLine(
+        {0.0f, 0.0f}, {0.0f, 0.0f}, p.radius,
+        {1.0f, -1.0f}, {1.0f, 1.0f}, p.horizon_T, p.dt);
+    Line wallBuffer[lineBufferSize(1)];
+    const Vec2 wallAvoidance = computeNewVelocity(
+        0, agents, nullptr, 0, &wall, 1, wallBuffer, p);
+    if (wallAvoidance.x >= p.v_max - 1.0e-4f ||
+        det(wall.direction, wall.point - wallAvoidance) > 1.0e-4f)
+    {
+        std::puts("FAIL: wall ORCA constraint does not block motion into wall");
+        return 1;
+    }
+
     std::puts("OK orca_velocity");
     return 0;
 }

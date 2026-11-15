@@ -23,6 +23,10 @@ namespace crowd
         goal_x_ = cur_.gx;
         goal_y_ = cur_.gy;
         agent_field_ = nav_.build(*map_, goal_x_, goal_y_, p_.radius);
+        orca_line_buffers_.resize(cur_.size() *
+            static_cast<std::size_t>(lineBufferSize(
+                static_cast<int>(p_.max_neighbors + map_->segments.size()))));
+        wall_lines_.resize(map_->segments.size());
     }
 
     static void insert_neighbor(std::int32_t id, float distance2,
@@ -55,7 +59,9 @@ namespace crowd
         const std::size_t n = cur_.size();
         const float dt = p_.dt;
         const float vmax = p_.v_max;
-        const std::size_t line_buffer_stride = p_.max_neighbors * 2;
+        const std::size_t line_buffer_stride = static_cast<std::size_t>(
+            lineBufferSize(static_cast<int>(p_.max_neighbors +
+                                            (map_ ? map_->segments.size() : 0))));
 
         const auto t0 = clk::now();
         grid_.build(cur_.x.data(), cur_.y.data(), n);
@@ -84,6 +90,7 @@ namespace crowd
         {
             const std::size_t count = neighbor_counts_[i];
             const std::int32_t* ids = neighbor_ids_.data() + i * p_.max_neighbors;
+            int wallCount = 0;
 
             if (map_)
             {
@@ -103,15 +110,37 @@ namespace crowd
                     cur_.gx[i] = cur_.x[i] + ox * look;      // waypoint iz polja
                     cur_.gy[i] = cur_.y[i] + oy * look;
                 }
+
+                const Vec2 position{cur_.x[i], cur_.y[i]};
+                const Vec2 velocity{cur_.vx[i], cur_.vy[i]};
+                const float wallRange = p_.radius + p_.v_max * p_.horizon_T;
+                const float wallRangeSq = wallRange * wallRange;
+                for (const Segment& segment : map_->segments)
+                {
+                    const Vec2 edge = segment.b - segment.a;
+                    const float edgeLengthSq = lengthSq(edge);
+                    float t = 0.0f;
+                    if (edgeLengthSq > 1.0e-12f)
+                        t = std::clamp(dot(position - segment.a, edge) / edgeLengthSq,
+                                        0.0f, 1.0f);
+                    const Vec2 closest = segment.a + edge * t;
+                    if (lengthSq(position - closest) <= wallRangeSq)
+                    {
+                        wall_lines_[static_cast<std::size_t>(wallCount++)] =
+                            makeWallOrcaLine(position, velocity, p_.radius,
+                                             segment.a, segment.b, p_.horizon_T, p_.dt);
+                    }
+                }
             }
 
             float vx, vy;
             if (p_.enable_orca)
             {
-                Line* line_buffer = count == 0 ? nullptr :
+                Line* line_buffer = (count == 0 && wallCount == 0) ? nullptr :
                     orca_line_buffers_.data() + i * line_buffer_stride;
                 const Vec2 velocity = computeNewVelocity(
-                    static_cast<int>(i), cur_, ids, static_cast<int>(count), line_buffer, p_);
+                    static_cast<int>(i), cur_, ids, static_cast<int>(count),
+                    wall_lines_.data(), wallCount, line_buffer, p_);
                 vx = velocity.x;
                 vy = velocity.y;
                 next_.x[i] = cur_.x[i] + vx * dt;
