@@ -1,0 +1,21 @@
+# ninja log v7
+1	60	8164828551955236	raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-mkdir	e0323ba14f4f733b
+1	60	8164828551955236	C:/Users/Korisnik/Desktop/crowd-navigation/build-diag/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-mkdir	e0323ba14f4f733b
+61	224695	8164830798239720	raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-download	5b686dc95c40f318
+61	224695	8164830798239720	C:/Users/Korisnik/Desktop/crowd-navigation/build-diag/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-download	5b686dc95c40f318
+224696	224925	8164830798239720	raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-update	d963cde77ee293d7
+224696	224925	8164830798239720	C:/Users/Korisnik/Desktop/crowd-navigation/build-diag/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-update	d963cde77ee293d7
+224925	225193	8164830803293883	raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-patch	bf0c40dafdc95637
+224925	225193	8164830803293883	C:/Users/Korisnik/Desktop/crowd-navigation/build-diag/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-patch	bf0c40dafdc95637
+225193	225390	8164830805187658	raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-configure	a39aea6836c6b92e
+225193	225390	8164830805187658	C:/Users/Korisnik/Desktop/crowd-navigation/build-diag/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-configure	a39aea6836c6b92e
+225390	225461	8164830805821312	raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-build	2bb1ed80c1ddff8c
+225390	225461	8164830805821312	C:/Users/Korisnik/Desktop/crowd-navigation/build-diag/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-build	2bb1ed80c1ddff8c
+225461	225676	8164830808065292	raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-install	7b693f77e13acaee
+225461	225676	8164830808065292	C:/Users/Korisnik/Desktop/crowd-navigation/build-diag/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-install	7b693f77e13acaee
+225676	225868	8164830809934444	raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-test	87d9a3ac247344b8
+225676	225868	8164830809934444	C:/Users/Korisnik/Desktop/crowd-navigation/build-diag/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-test	87d9a3ac247344b8
+225868	226018	8164830811363656	CMakeFiles/raylib-populate-complete	c957396b19798ed4
+225868	226018	8164830811363656	raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-done	c957396b19798ed4
+225868	226018	8164830811363656	C:/Users/Korisnik/Desktop/crowd-navigation/build-diag/_deps/raylib-subbuild/CMakeFiles/raylib-populate-complete	c957396b19798ed4
+225868	226018	8164830811363656	C:/Users/Korisnik/Desktop/crowd-navigation/build-diag/_deps/raylib-subbuild/raylib-populate-prefix/src/raylib-populate-stamp/raylib-populate-done	c957396b19798ed4

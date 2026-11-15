@@ -11,6 +11,10 @@
 
 namespace crowd
 {
+#ifdef CROWD_DIAG
+    extern unsigned long long g_cand, g_inradius, g_inserted;
+#endif
+
     // Vrijeme faza jednog koraka (ms); popunjava se samo ako je zadan pokazivac.
     struct StepTimes
     {

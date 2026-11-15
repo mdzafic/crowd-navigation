@@ -23,14 +23,20 @@ int main(int argc, char** argv)
 {
     // Izdvoji opcije --csv i --label; ostalo su pozicioni argumenti.
     std::string csv_path, label = "none";
+    std::size_t force_n = 0;
     std::vector<std::string> a;
     a.push_back(argv[0]);
     for (int i = 1; i < argc; ++i)
     {
         const std::string s = argv[i];
-        if (s == "--csv" && i + 1 < argc) csv_path = argv[++i];
-        else if (s == "--label" && i + 1 < argc) label = argv[++i];
-        else a.push_back(s);
+        if (s == "--csv" && i + 1 < argc)
+            csv_path = argv[++i];
+        else if (s == "--label" && i + 1 < argc)
+            label = argv[++i];
+        else if (s == "--n" && i + 1 < argc)
+            force_n = std::strtoull(argv[++i], nullptr, 10);
+        else
+            a.push_back(s);
     }
     const int ac = static_cast<int>(a.size());
 
@@ -99,6 +105,9 @@ int main(int argc, char** argv)
     {
         sizes = { 1000, 5000, 10000, 20000 };
     }
+
+    if (force_n > 0)
+        sizes = { force_n };
 
     const std::string scen_name = map_mode ? map_path : "antipodal_disk";
 
@@ -171,5 +180,11 @@ int main(int argc, char** argv)
             tot * 1000.0 / static_cast<double>(n), median(avgnb));
     }
     if (csv) std::fclose(csv);
+
+#ifdef CROWD_DIAG
+    std::printf("DIAG ukupno: kandidata=%llu, u_radijusu=%llu, ubaceno=%llu\n",
+        g_cand, g_inradius, g_inserted);
+#endif
+
     return 0;
 }

@@ -79,3 +79,6 @@ if(CROWD_VIZ)
   add_executable(crowd_viz src/viz_main.cpp)
   target_link_libraries(crowd_viz PRIVATE crowd raylib)
 endif()
+
+target_compile_options(crowd PRIVATE -g)
+target_compile_options(crowd_bench PRIVATE -g)
