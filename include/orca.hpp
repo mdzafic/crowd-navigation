@@ -30,6 +30,10 @@ namespace crowd
                       Vec2 positionB, Vec2 velocityB, float radiusB,
                       float horizon_T, float dt);
 
+    Line makeWallOrcaLine(Vec2 position, Vec2 velocity, float radius,
+                          Vec2 segmentA, Vec2 segmentB,
+                          float horizon_T, float dt);
+
     constexpr int lineBufferSize(int neighborCount) noexcept
     {
         return neighborCount > 0 ? 2 * neighborCount : 0;
@@ -37,4 +41,8 @@ namespace crowd
 
     Vec2 computeNewVelocity(int agentIndex, const Agents& cur, const int* neighbors,
                             int neighborCount, Line* lineBuffer, const Params& p);
+
+    Vec2 computeNewVelocity(int agentIndex, const Agents& cur, const int* neighbors,
+                            int neighborCount, const Line* obstacleLines,
+                            int obstacleCount, Line* lineBuffer, const Params& p);
 }

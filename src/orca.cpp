@@ -182,8 +182,30 @@ namespace crowd
         return {velocityA + u * 0.5f, {normal.y, -normal.x}};
     }
 
+    Line makeWallOrcaLine(Vec2 position, Vec2 velocity, float radius,
+                          Vec2 segmentA, Vec2 segmentB,
+                          float horizon_T, float dt)
+    {
+        const Vec2 segment = segmentB - segmentA;
+        const float segmentLengthSq = lengthSq(segment);
+        float t = 0.0f;
+        if (segmentLengthSq > epsilon * epsilon)
+            t = std::clamp(dot(position - segmentA, segment) / segmentLengthSq, 0.0f, 1.0f);
+        const Vec2 closestPoint = segmentA + segment * t;
+        return makeOrcaLine(position, velocity, radius, closestPoint, {0.0f, 0.0f},
+                            0.0f, horizon_T, dt);
+    }
+
     Vec2 computeNewVelocity(int agentIndex, const Agents& cur, const int* neighbors,
                             int neighborCount, Line* lineBuffer, const Params& p)
+    {
+        return computeNewVelocity(agentIndex, cur, neighbors, neighborCount, nullptr, 0,
+                                  lineBuffer, p);
+    }
+
+    Vec2 computeNewVelocity(int agentIndex, const Agents& cur, const int* neighbors,
+                            int neighborCount, const Line* obstacleLines,
+                            int obstacleCount, Line* lineBuffer, const Params& p)
     {
         const std::size_t agent = static_cast<std::size_t>(agentIndex);
         const Vec2 position{cur.x[agent], cur.y[agent]};
@@ -194,31 +216,42 @@ namespace crowd
         if (goalDistanceSq > maxSpeedSq)
             preferredVelocity = normalized(goalOffset) * p.v_max;
 
-        if (neighborCount <= 0)
+        if (neighborCount <= 0 && obstacleCount <= 0)
             return preferredVelocity;
 
-        //rotacija željene brzine za 0.02 rad dovoljno razbija simetriju da se mimoilaze
-        constexpr float kSymmetryAngle = 0.02f; // radijani, po potrebi 0.02-0.05
-        const float c = std::cos(kSymmetryAngle);
-        const float s = std::sin(kSymmetryAngle);
-        preferredVelocity = { c * preferredVelocity.x - s * preferredVelocity.y,
-              s * preferredVelocity.x + c * preferredVelocity.y };
+        if (neighborCount > 0)
+        {
+            // Rotacija zeljene brzine razbija simetriju pri mimoilazenju agenata.
+            constexpr float kSymmetryAngle = 0.02f;
+            const float c = std::cos(kSymmetryAngle);
+            const float s = std::sin(kSymmetryAngle);
+            preferredVelocity = { c * preferredVelocity.x - s * preferredVelocity.y,
+                                  s * preferredVelocity.x + c * preferredVelocity.y };
+        }
+
+        for (int i = 0; i < obstacleCount; ++i)
+            lineBuffer[i] = obstacleLines[i];
 
         for (int i = 0; i < neighborCount; ++i)
         {
             const std::size_t neighbor = static_cast<std::size_t>(neighbors[i]);
-            lineBuffer[i] = makeOrcaLine(
+            lineBuffer[obstacleCount + i] = makeOrcaLine(
                 position, {cur.vx[agent], cur.vy[agent]}, p.radius,
                 {cur.x[neighbor], cur.y[neighbor]}, {cur.vx[neighbor], cur.vy[neighbor]},
                 p.radius, p.horizon_T, p.dt);
         }
 
         Vec2 result;
-        const int failedLine = linearProgram2(lineBuffer, neighborCount, p.v_max,
+        const int lineCount = obstacleCount + neighborCount;
+        const int failedLine = linearProgram2(lineBuffer, lineCount, p.v_max,
                                               preferredVelocity, false, result);
-        if (failedLine < neighborCount)
-            linearProgram3(lineBuffer, neighborCount, failedLine, p.v_max,
-                           lineBuffer + neighborCount, result);
+        if (failedLine < lineCount)
+        {
+            const int beginLine = std::max(obstacleCount, failedLine);
+            if (beginLine < lineCount)
+                linearProgram3(lineBuffer, lineCount, beginLine, p.v_max,
+                               lineBuffer + lineCount, result);
+        }
         return result;
     }
 }

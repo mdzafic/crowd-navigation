@@ -44,6 +44,14 @@ Folder `docs/` sadrži naučne radove, bilješke i linkove relevantne za projeka
 
 Model kretanja računa novu brzinu agenta iz cilja, susjeda i prepreka. Isti model koristi se u sekvencijalnoj, OpenMP i CUDA verziji, jer bi se u suprotnom ubrzanje od paralelizacije miješalo sa razlikom u količini posla, a ispravnost se ne bi mogla provjeriti poređenjem rezultata. Mijenja se samo implementacija prilagođena hardveru, ne matematika.
 
+U trenutnoj sekvencijalnoj referentnoj implementaciji:
+
+- Dijkstra navigacijsko polje sa 8 susjeda daje preferirani smjer prema cilju i penalizuje ćelije blizu zida.
+- Zidovi se pretvaraju u segmente. Za segmente u dometu agenta generišu se statička ORCA ograničenja prije agent-agent ograničenja.
+- Nakon ORCA integracije ostaje geometrijska provjera `blocked` kao sigurnosna mreža; ona nije zamjena za zidna ograničenja.
+
+Pretraga segmenata je trenutno linearna kroz segmente mape. Za velike mape sljedeći korak je prostorni indeks segmenata po ćelijama, ali to ne mijenja model ograničenja.
+
 | | Social Force (Helbing) | ORCA (van den Berg et al.) |
 |---|---|---|
 | Ideja | sila ka cilju i sile odbijanja od agenata i zidova | za svakog susjeda jedno linearno ograničenje u prostoru brzina; rješava se linearno programiranje |
@@ -127,6 +135,25 @@ cmake --build build -j
 ```
 
 Očekivani zahtjevi: C++ kompajler sa podrškom za OpenMP, CMake, CUDA Toolkit (za GPU verziju), Python 3 sa `matplotlib` (za vizualizaciju i grafikone).
+
+Benchmark bez mape koristi antipodalni disk:
+
+```bash
+./build/crowd_bench
+./build/crowd_bench 10
+```
+
+Benchmark jedne ASCII mape koristi `--map <fajl> [N] [ponavljanja]`:
+
+```bash
+./build/crowd_bench --map maps/labirint.txt
+./build/crowd_bench --map maps/vrata.txt 500 5
+```
+
+Bez `N` koriste se četiri veličine proporcionalne mapi:
+`slobodno/8`, `slobodno/4`, `slobodno/2` i `slobodno`. Ako navedeš `N`,
+benchmarkuje se samo ta jedna veličina. Za svaku mapu pokreće se isti
+benchmark: 20 koraka zagrijavanja i 100 mjerenih koraka.
 
 ## Pojmovi i skraćenice
 
