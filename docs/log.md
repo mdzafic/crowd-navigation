@@ -111,3 +111,36 @@ instrukcija 33% više: IPC 1.61 → 2.99, Bad Speculation -13.8 p.p. Hipoteza po
 Ostaje 32% Bad Speculation, uglavnom u insert_neighbor.
 
 **Sljedeće:** EXP-004, odabir k najmanjih bez grananja.
+
+## EXP-004 | 2026-11-16 | Odabir k najmanjih: k prolaza traženja minimuma (NEGATIVAN REZULTAT)
+**Verzija koda:** commit <hash> (izmjena koraka 2 petlje faze 2), prethodna: EXP-003
+
+**Hipoteza:** preostali Bad Speculation (32%) potiče iz insert_neighbor; fiksni predvidivi prolazi ga uklanjaju.
+
+**Promjena:** zamjena umetanja sa k prolaza traženja minimuma preko m≈56 kandidata (cmov, strogo "<"), isti redoslijed pri jednakim d2.
+
+**Parametri:** antipodal_disk, k=10, zagrijavanje 20, mjerenje 21..120, 15 ponavljanja, medijan; build/ Release -O3 -march=native
+
+**Rezultati (ukupno ms, run a):**
+| N | EXP-003 | EXP-004 | promjena |
+| 1000 | 0.651 | 0.772 | +19% |
+| 5000 | 4.361 | 5.759 | +32% |
+| 10000 | 8.334 | 10.679 | +28% |
+| 20000 | 14.453 | 17.974 | +24% |
+Run b: N=1000 i 20000 potvrđuju; redovi 5000 i 10000 pokvareni šumom (max 12.9 i 21.9 ms).
+
+**VTune uarch (N=20000):**
+| | EXP-003 | EXP-004 |
+| Elapsed | 8.575 s | 10.655 s |
+| Bad Speculation | 32.2% | 11.6% |
+| Retiring | 48.3% | 50.7% |
+| Back-End Bound | 7.5% | 31.8% (Core Bound 25.8%) |
+| Instructions retired | 109.6 G | 142.7 G (+30%) |
+| CPI | 0.334 | 0.320 |
+| Vector Capacity Usage | | 6.2% |
+
+**Zaključak:** hipoteza odbačena. Grananje je uklonjeno (Bad Spec -20.6 p.p.), ali ~560 poređenja po agentu
+naspram ~27 umetanja daje 30% više instrukcija; kod prelazi iz branch-bound u compute-bound
+(Core Bound, Port 6). Petlja arg-min nije se auto-vektorizirala (Vector Capacity 6.2%).
+
+**Odluka:** vraćena EXP-003 verzija. Sljedeće: EXP-005, smanjenje broja kandidata (ćelije R/2, 5x5).
