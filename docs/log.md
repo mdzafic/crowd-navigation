@@ -194,3 +194,54 @@ Mreža: 0.059 → 0.068 ms (zanemarivo). ORCA nepromijenjena (~2.67 ms).
 **Zaključak:** dobit 6–11%, granično ispod praga 1.1x. Zadržano s = 3 (najbrži, bez troška).
 
 **Serijska faza:** ukupno baseline 20.01 ms → 13.06 ms pri N = 20000 = 1.53x.
+
+---
+
+## EXP-006 | 2026-11-16 | k najbližih: obilazak od najbliže ćelije + smanjivanje praga
+
+**Verzija koda:** baseline poređenja: EXP-005 (`2c8c6db`); izmjene u `include/grid.hpp`, `src/grid.cpp`, `src/sim.cpp`, `tests/test_grid.cpp`.
+
+**Hipoteza:** kandidati se obilaze red po red (nasumično po udaljenosti), pa se top-k stalno prepisuje (~27 umetanja za 10 mjesta) i uvijek se pregleda svih 49 ćelija. Ako se ćelije obilaze od najbliže i prag nakon punjenja top-k spusti sa R² na d2 k-tog susjeda (kao u RVO2 kd-stablu), odsijecaju se cijele ćelije, a većina preostalih kandidata se odbaci jednim predvidivim poređenjem.
+
+**Promjena:**
+- Nova metoda `Grid::k_nearest(self, R, k, ids, d2s)`; faza 2 u `Sim::step` je jedan poziv po agentu (`insert_neighbor` i baferi kandidata uklonjeni).
+- Ćelije prozora (2s+1)² obilaze se prsten po prsten (unutar prstena po udaljenosti centra).
+- Za svaku ćeliju računa se donja granica udaljenosti (po osi, rubne ćelije beskonačne prema van zbog clampanih agenata, mala rezerva `slack_` za zaokruživanje); ćelija se preskače ako je granica > prag. Cijeli prsten se prekida ako je njegova minimalna granica > prag.
+- `build()` dodatno puni `sx_`, `sy_` (pozicije u redoslijedu `sorted_ids_`) i `pos_of_` → uzastopno čitanje bez indirekcije.
+- Poredak pri jednakim d2 razrješava se po poziciji u `sorted_ids_`, što je tačno poredak stare petlje → izlaz bit-identičan.
+- `CROWD_SUBDIV` se sada stvarno koristi (podrazumijevano 3).
+
+**Parametri:** `antipodal_disk`, k = 10, zagrijavanje 20, mjerenje 21..120, 9 ponavljanja, medijan; Release `-O3 -march=native`. Stara i nova verzija mjerene naizmjenično (stara, nova, stara, nova).
+
+**Ispravnost:**
+- Dump pozicija i lista susjeda u svakom koraku (N = 5000 / 200 koraka, N = 20000 / 60 koraka): identičan hash stare i nove verzije.
+- `test_grid`: `k_nearest` naspram brute-force top-k za k = 1, 10, 64 i subdiv = 1..4, uključujući agente van granica svijeta; svih 6 testova prolazi.
+
+**Opterećenje po agentu po koraku (N = 20000, s = 3, CROWD_DIAG):**
+
+| | EXP-005 | EXP-006 |
+|---|---:|---:|
+| Pregledanih kandidata | ~97* | 24.2 |
+| Umetanja u top-k (min. 10) | ~26.6* | 13.8 |
+
+\* Nije direktno izmjereno za EXP-005: kandidati su procjena (49 ćelija × gustoća, iz 158.7 kandidata na 9 ćelija u EXP-002), umetanja su vrijednost iz EXP-002 (s = 1); redoslijed obilaska je isti, pa se broj umetanja ne mijenja bitno.
+
+Za poređenje, EXP-006 sa s = 1: 63.1 kandidat i 19.7 umetanja; s = 2: 32.9 i 16.5.
+
+**Rezultati (ms/korak, medijan, N = 20000, dva naizmjenična pokretanja):**
+
+| | EXP-005 | EXP-006 |
+|---|---:|---:|
+| top-k | 32.70 / 32.00 | 17.08 / 19.20 |
+| ORCA (kontrola) | 10.04 / 9.80 | 8.19 / 9.02 |
+| ukupno | 42.93 / 42.06 | 25.54 / 28.51 |
+
+Ostale veličine (run 1): N = 1000 ukupno 2.46 → 1.46 ms, N = 5000 17.70 → 6.82 ms, N = 10000 35.95 → 13.03 ms.
+
+**Izbor subdiv (EXP-006, N = 20000, ukupno ms):** s = 1: 27.92, s = 2: 25.49, s = 3: 28.19, s = 4: 26.70 — razlike unutar šuma; zadržano s = 3.
+
+**Šum:** mjerenja su ~2.5x sporija od EXP-001..005 (napajanje vjerovatno Balanced, ne High performance). Stara verzija je imala jake skokove (N = 10000: top-k 27.5 ms naspram 18.3 ms u ranijem pokretanju; max do 64 ms), pa su apsolutni brojevi nepouzdani. **Ponoviti po protokolu iz EXP-000** (High performance + punjač, 15 ponavljanja) prije konačnog upisa ubrzanja.
+
+**Zaključak:** hipoteza potvrđena. Kandidata 4x manje, umetanja 2x manje; top-k približno 1.7–1.9x brže, ukupno približno 1.5–1.7x (procjena, vidi šum). Top-k je sada blizu donje granice (13.8 umetanja za 10 susjeda), a ORCA čini ~1/3 vremena.
+
+**Sljedeće:** ponoviti mjerenje u čistim uslovima i VTune uarch; zatim paralelizacija (OpenMP) — `k_nearest` je `const` i bez dijeljenih bafera, pa je petlja po agentima nezavisna. Opciono: kvalitet simulacije za k = 10 naspram k = 15–20.

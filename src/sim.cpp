@@ -15,14 +15,14 @@ namespace crowd
 
 static int subdiv_from_env() {
     const char* s = std::getenv("CROWD_SUBDIV");
-    return s ? std::max(1, std::atoi(s)) : 2;
+    return s ? std::max(1, std::atoi(s)) : 3;
 }
 
 namespace crowd
 {
     Sim::Sim(Agents initial, World world, const Params& p)
         : p_(p), cur_(std::move(initial)),
-        grid_(world, p.interaction_radius(), cur_.size(), 3),
+        grid_(world, p.interaction_radius(), cur_.size(), subdiv_from_env()),
         neighbor_ids_(cur_.size()* p.max_neighbors, -1),
         neighbor_distances_(cur_.size()* p.max_neighbors, 0.f),
         neighbor_counts_(cur_.size(), 0),
@@ -43,30 +43,6 @@ namespace crowd
             static_cast<std::size_t>(lineBufferSize(
                 static_cast<int>(p_.max_neighbors + map_->segments.size()))));
         wall_lines_.resize(map_->segments.size());
-    }
-
-    static bool insert_neighbor(std::int32_t id, float distance2,
-        std::int32_t* ids, float* distances,
-        std::size_t& count, std::size_t limit)
-    {
-        if (limit == 0 || (count == limit && distance2 >= distances[count - 1]))
-            return false;
-
-        const std::size_t new_count = count < limit ? count + 1 : count;
-        std::size_t pos = new_count - 1;
-
-        while (pos > 0 && distance2 < distances[pos - 1])
-        {
-            distances[pos] = distances[pos - 1];
-            ids[pos] = ids[pos - 1];
-            --pos;
-        }
-
-        distances[pos] = distance2;
-        ids[pos] = id;
-        count = new_count;
-
-        return true;
     }
 
     void Sim::step(StepTimes* times)
@@ -90,56 +66,16 @@ namespace crowd
         const auto t1 = clk::now();
 
 
-        // Lokalni baferi kandidata (alociraju se jednom po koraku, ne po agentu).
-// Ne smiju biti static/thread_local ako kasnije paraleliziramo.
-        std::vector<std::int32_t> cand_id(512);
-        std::vector<float> cand_d2(512);
+        // Faza 2: k najblizih (EXP-006: obilazak celija od najblize, prag se
+        // smanjuje na d2 k-tog susjeda, cijele celije se odsijecaju).
+        // Svaka iteracija je nezavisna -> spremno za OpenMP.
         const float rad = p_.interaction_radius();
-        const float r2 = rad * rad;
-        const float* px = cur_.x.data();
-        const float* py = cur_.y.data();
-
         for (std::size_t i = 0; i < n; ++i)
         {
-            std::int32_t* ids = neighbor_ids_.data() + i * p_.max_neighbors;
-            float* distances = neighbor_distances_.data() + i * p_.max_neighbors;
-            const float xi = px[i], yi = py[i];
-            std::size_t count = 0;
-            std::size_t m = 0;
-
-#ifdef CROWD_DIAG
-            grid_.for_each_candidate(xi, yi, [&](std::int32_t) { ++g_cand; });
-#endif
-
-            // 1) Kandidati: d2 racunamo za sve, upisujemo uvijek,
-            //    a brojac m povecavamo maskom (bez grananja).
-            grid_.for_each_candidate(xi, yi, [&](std::int32_t j) {
-                if (m + 1 >= cand_id.size())          // rijetko i predvidivo
-                {
-                    cand_id.resize(cand_id.size() * 2);
-                    cand_d2.resize(cand_d2.size() * 2);
-                }
-                const float dx = px[j] - xi, dy = py[j] - yi;
-                const float d2 = dx * dx + dy * dy;
-                cand_id[m] = j;
-                cand_d2[m] = d2;
-                m += static_cast<std::size_t>(
-                    (d2 <= r2) & (static_cast<std::size_t>(j) != i));
-                });
-
-            // 2) Umetanje u sortirani top-k (isti redoslijed kao prije).
-            for (std::size_t c = 0; c < m; ++c)
-            {
-                [[maybe_unused]] const bool ins = insert_neighbor(
-                    cand_id[c], cand_d2[c],
-                    ids, distances, count, p_.max_neighbors);
-#ifdef CROWD_DIAG
-                ++g_inradius;
-                g_inserted += ins;
-#endif
-            }
-
-            neighbor_counts_[i] = count;
+            neighbor_counts_[i] = grid_.k_nearest(
+                i, rad, p_.max_neighbors,
+                neighbor_ids_.data() + i * p_.max_neighbors,
+                neighbor_distances_.data() + i * p_.max_neighbors);
         }
 
         const auto t2 = clk::now();

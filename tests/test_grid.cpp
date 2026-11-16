@@ -45,6 +45,47 @@ static bool check(std::size_t n, float spacing, bool shuffle_to_edges)
         pairs += brute.size();
     }
 
+    // k_nearest: za k = 1, 10, 64 i subdiv = 1..4 udaljenosti moraju biti iste
+    // kao k najmanjih iz brute-force pretrage, sortirane, bez samog agenta.
+    for (int subdiv = 1; subdiv <= 4; ++subdiv)
+    {
+        Grid g(s.world, R, n, subdiv);
+        g.build(a.x.data(), a.y.data(), n);
+        for (std::size_t k : { std::size_t{ 1 }, std::size_t{ 10 }, std::size_t{ 64 } })
+        {
+            std::vector<std::int32_t> ids(k);
+            std::vector<float> d2s(k);
+            for (std::size_t i = 0; i < n; ++i)
+            {
+                std::vector<float> brute;
+                for (std::size_t j = 0; j < n; ++j)
+                {
+                    if (j == i) continue;
+                    const float dx = a.x[j] - a.x[i], dy = a.y[j] - a.y[i];
+                    const float d2 = dx * dx + dy * dy;
+                    if (d2 <= R * R) brute.push_back(d2);
+                }
+                std::sort(brute.begin(), brute.end());
+                if (brute.size() > k) brute.resize(k);
+
+                const std::size_t c = g.k_nearest(i, R, k, ids.data(), d2s.data());
+                bool ok = c == brute.size();
+                for (std::size_t t = 0; ok && t < c; ++t)
+                {
+                    const std::size_t j = static_cast<std::size_t>(ids[t]);
+                    const float dx = a.x[j] - a.x[i], dy = a.y[j] - a.y[i];
+                    ok = j != i && d2s[t] == brute[t] && dx * dx + dy * dy == d2s[t];
+                }
+                if (!ok)
+                {
+                    std::printf("GRESKA k_nearest: agent %zu, k=%zu subdiv=%d (dobijeno %zu, ocekivano %zu)\n",
+                                i, k, subdiv, c, brute.size());
+                    return false;
+                }
+            }
+        }
+    }
+
     // Svaki agent mora biti u sorted_ids tacno jednom.
     std::vector<int> seen(n, 0);
     for (std::int32_t id : grid.sorted_ids()) if (id >= 0 && static_cast<std::size_t>(id) < n) ++seen[id];
