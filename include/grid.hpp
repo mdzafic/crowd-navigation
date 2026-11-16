@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <vector>
 #include "scenario.hpp"
+#include <cstdlib>
 
 namespace crowd
 {
@@ -15,7 +16,7 @@ namespace crowd
     class Grid
     {
     public:
-        Grid(const World& world, float cell_size, std::size_t max_agents);
+        Grid(const World& world, float cell_size, std::size_t max_agents, int subdiv = 1);
 
         void build(const float* x, const float* y, std::size_t n);
 
@@ -28,15 +29,15 @@ namespace crowd
         int cell_index(int cx, int cy) const noexcept { return cy * W_ + cx; }
 
         // Poziva f(j) za svakog kandidata j (ukljucujuci i samog agenta)
-        // iz 3x3 celija oko pozicije (x,y).
+        // iz (2*reach+1)² celija oko pozicije (x,y).
         // Optimizacija: tri susjedne celije u istom redu su uzastopne u
         // memoriji, pa su to samo 3 raspona umjesto 9.
         template <class F>
         void for_each_candidate(float x, float y, F&& f) const
         {
             const int cx = cell_x(x), cy = cell_y(y);
-            const int x0 = std::max(cx - 1, 0), x1 = std::min(cx + 1, W_ - 1);
-            const int y0 = std::max(cy - 1, 0), y1 = std::min(cy + 1, H_ - 1);
+            const int x0 = std::max(cx - reach_, 0), x1 = std::min(cx + reach_, W_ - 1);
+            const int y0 = std::max(cy - reach_, 0), y1 = std::min(cy + reach_, H_ - 1);
             for (int yy = y0; yy <= y1; ++yy)
             {
                 const std::int32_t b = cell_start_[yy * W_ + x0];
@@ -69,6 +70,7 @@ namespace crowd
 
         float min_x_, min_y_, R_, inv_R_;
         int W_, H_;
+        int reach_;
         std::vector<std::int32_t> cell_of_;     // [n]     celija svakog agenta
         std::vector<std::int32_t> cell_start_;  // [W*H+1] prefix sum
         std::vector<std::int32_t> cursor_;      // [W*H]   radni bafer za scatter

@@ -4,8 +4,11 @@
 
 namespace crowd
 {
-    Grid::Grid(const World& world, float cell_size, std::size_t max_agents)
-        : min_x_(world.min_x), min_y_(world.min_y), R_(cell_size), inv_R_(1.0f / cell_size)
+    Grid::Grid(const World& world, float cell_size, std::size_t max_agents, int subdiv)
+        : min_x_(world.min_x), min_y_(world.min_y),
+        R_(cell_size / static_cast<float>(subdiv)),
+        inv_R_(static_cast<float>(subdiv) / cell_size),
+        reach_(subdiv)
     {
         W_ = std::max(1, static_cast<int>(std::ceil((world.max_x - world.min_x) * inv_R_)));
         H_ = std::max(1, static_cast<int>(std::ceil((world.max_y - world.min_y) * inv_R_)));

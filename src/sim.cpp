@@ -13,11 +13,16 @@ namespace crowd
 }
 #endif
 
+static int subdiv_from_env() {
+    const char* s = std::getenv("CROWD_SUBDIV");
+    return s ? std::max(1, std::atoi(s)) : 2;
+}
+
 namespace crowd
 {
     Sim::Sim(Agents initial, World world, const Params& p)
         : p_(p), cur_(std::move(initial)),
-        grid_(world, p.interaction_radius(), cur_.size()),
+        grid_(world, p.interaction_radius(), cur_.size(), 3),
         neighbor_ids_(cur_.size()* p.max_neighbors, -1),
         neighbor_distances_(cur_.size()* p.max_neighbors, 0.f),
         neighbor_counts_(cur_.size(), 0),
