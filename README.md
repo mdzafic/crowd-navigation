@@ -24,17 +24,10 @@ Centralna poteškoća za paralelizaciju je **neravnomjerna raspodjela posla**: u
 Folder `docs/` sadrži naučne radove, bilješke i linkove relevantne za projekat.
 
 **`model/`**: radovi o modelima kretanja i izbjegavanja sudara.
-- Helbing i Molnár, *Social force model for pedestrian dynamics* (Physical Review E, 51(5), 1995): osnovni Social Force model.
-- van den Berg, Guy, Lin, Manocha, *Reciprocal n-body collision avoidance* (Springer Tracts in Advanced Robotics, vol. 70, 2011): ORCA.
-- Referentna implementacija ORCA-e: RVO2 biblioteka (`snape/RVO2`, GitHub), koristi se isključivo kao referenca za provjeru.
 
 **`paralelizacija/`**: radovi o paralelnoj obradi simulacije gomile.
-- Guy et al., *ClearPath: Highly Parallel Collision Avoidance for Multi-Agent Simulation* (SCA 2009): dinamičko raspoređivanje agenata, SIMD pristupi, ublažavanje divergencije.
-- Bleiweiss, *Multi Agent Navigation on the GPU* (GDC 2009): raspored podataka na GPU-u (SoA), prostorni hashing, analiza iskorištenja GPU-a.
-- Charlton, Gonzalez, Maddock, Richmond, *Fast Simulation of Crowd Collision Avoidance* (CGI 2019): GPU implementacija ORCA-e uz prostornu mrežu, problem balansa opterećenja.
-- Skrzypczak i Czarnul, *Efficient parallel implementation of crowd simulation using a hybrid CPU+GPU high performance computing system* (Simulation Modelling Practice and Theory, 2022): OpenMP + CUDA implementacija.
 
-**`prostorno-indeksiranje/`**: radovi o prostornim strukturama i traženju susjeda (Uniform Grid, cell lists, hashing na GPU-u).
+**`prostorno-indeksiranje/`**: radovi o prostornim strukturama i traženju susjeda.
 
 **`linkovi-implementacije.md`**: linkovi na implementacije, dokumentaciju (OpenMP, CUDA, Thrust/CUB) i alate za profilisanje.
 
@@ -42,118 +35,133 @@ Folder `docs/` sadrži naučne radove, bilješke i linkove relevantne za projeka
 
 ## Model kretanja
 
-Model kretanja računa novu brzinu agenta iz cilja, susjeda i prepreka. Isti model koristi se u sekvencijalnoj, OpenMP i CUDA verziji, jer bi se u suprotnom ubrzanje od paralelizacije miješalo sa razlikom u količini posla, a ispravnost se ne bi mogla provjeriti poređenjem rezultata. Mijenja se samo implementacija prilagođena hardveru, ne matematika.
-
-U trenutnoj sekvencijalnoj referentnoj implementaciji:
-
-- Dijkstra navigacijsko polje sa 8 susjeda daje preferirani smjer prema cilju i penalizuje ćelije blizu zida.
-- Zidovi se pretvaraju u segmente. Za segmente u dometu agenta generišu se statička ORCA ograničenja prije agent-agent ograničenja.
-- Nakon ORCA integracije ostaje geometrijska provjera `blocked` kao sigurnosna mreža; ona nije zamjena za zidna ograničenja.
-
+Za izbjegavanje sudara koristi se **ORCA** (Optimal Reciprocal Collision Avoidance, van den Berg et al.). Za svakog susjeda agent dobija jedno linearno ograničenje u prostoru brzina, a nova brzina se bira rješavanjem linearnog programa tako da bude što bliža preferiranoj brzini ka cilju. Isti model koristi se u sekvencijalnoj, OpenMP i CUDA verziji, jer bi se u suprotnom ubrzanje od paralelizacije miješalo sa razlikom u količini posla, a ispravnost se ne bi mogla provjeriti poređenjem rezultata. Mijenja se samo implementacija prilagođena hardveru, ne matematika.
+ 
+### Šta je implementirano
+ 
+- **Navigacijsko polje:** Dijkstra sa 8 susjeda daje preferirani smjer prema cilju i penalizuje ćelije blizu zida.
+- **Agent-agent ORCA ograničenja** za `k` najbližih susjeda, uz rješavanje linearnog programa za novu brzinu (validirano testovima).
+- **Zidovi:** mapa se pretvara u segmente, a za segmente u dometu agenta generišu se statička ORCA ograničenja prije agent-agent ograničenja.
+- **Sigurnosna mreža:** nakon ORCA integracije ostaje geometrijska provjera `blocked`; ona nije zamjena za zidna ograničenja.
+- **Referenca ispravnosti:** RVO2 biblioteka koristi se isključivo za provjeru rezultata.
 Pretraga segmenata je trenutno linearna kroz segmente mape. Za velike mape sljedeći korak je prostorni indeks segmenata po ćelijama, ali to ne mijenja model ograničenja.
-
-| | Social Force (Helbing) | ORCA (van den Berg et al.) |
-|---|---|---|
-| Ideja | sila ka cilju i sile odbijanja od agenata i zidova | za svakog susjeda jedno linearno ograničenje u prostoru brzina; rješava se linearno programiranje |
-| Sudari | nema garancije, pri velikoj gustini moguća preklapanja | dizajnirana da izbjegava sudare (uz pretpostavku da svi agenti koriste isti algoritam) |
-| Implementacija | jednostavnija | složenija (LP, prepreke kao segmenti, nemogući slučajevi) |
-| Posao po agentu | zavisi od broja susjeda | zavisi od broja susjeda i grananja u LP-u |
-
-**Radna pretpostavka:** Social Force kao glavni model, uz ORCA-u kao moguće proširenje.
-
-## Inicijalni plan implementacije
+ 
+## Implementacija
  
 Projekat se piše u C++20 uz CMake kao jedna zajednička jezgra sa tri izvršna dijela: sekvencijalnim, OpenMP i CUDA. Sva tri koriste isti model, iste scenarije i isti format izlaza, pa se rezultati i vremena mogu direktno porediti.
  
 ### Stanje simulacije
  
 - **Agenti:** pozicija, brzina, cilj, radijus i željena brzina, pohranjeni kao SoA (zasebni nizovi `x`, `y`, `vx`, `vy`, `gx`, `gy`). Stanje se drži u dva primjerka (trenutno i sljedeće), pa svi agenti u jednom koraku čitaju isti ulaz i redoslijed obrade ne mijenja rezultat.
-- **Prepreke:** zidovi i granice prostora kao skup dužina.
-- **Prostorna mreža:** kvadratne ćelije stranice jednake radijusu interakcije `R`. Agenti su u niz indeksa sortiranom po ćelijama, uz zaseban niz početaka ćelija, pa je pretraga susjeda niz sekvencijalnih čitanja.
-### Faza 1: sekvencijalna verzija
+- **Prepreke:** zidovi i granice prostora kao skup dužina, učitani iz ASCII mapa.
+- **Prostorna mreža:** agenti su u nizu indeksa sortiranom po ćelijama, uz zaseban niz početaka ćelija, pa je pretraga susjeda niz sekvencijalnih čitanja. Veličina ćelije zavisi od parametra podjele (`subdiv`, trenutno 3, vidi EXP-005). <!-- TODO: provjeriti tačan opis parametra subdiv -->
+### Korak simulacije
  
-Redoslijed izrade, svaki korak se testira prije sljedećeg:
+1. izgradnja mreže,
+2. traženje `k` najbližih susjeda za svakog agenta (top-k),
+3. ORCA: statička ograničenja zidova, pa agent-agent ograničenja, pa rješavanje linearnog programa za novu brzinu,
+4. integracija pozicija uz ograničenje maksimalne brzine i `blocked` provjeru.
+Računanje brzine je izdvojeno u zasebnu funkciju, pa se model može zamijeniti bez dodira mreže i paralelizacije.
  
-1. kretanje ka cilju bez interakcije,
-2. naivno O(N²) izbjegavanje agenata, kao referenca ispravnosti,
-3. zidovi,
-4. prostorna mreža, uz provjeru da daje iste sile kao naivna verzija,
-5. snimanje pozicija i referentnog izlaza (fiksan seed), pa označavanje verzije Git tagom.
-Korak simulacije: izgradnja mreže, traženje susjeda u radijusu `R`, računanje nove brzine (sila ka cilju plus odbijanje od agenata i zidova), integracija uz ograničenje maksimalne brzine i, opcionalno, korekcija preklapanja. Računanje brzine je izdvojeno u zasebnu funkciju, pa se model može zamijeniti bez dodira mreže i paralelizacije.
+### Planirano
  
-### Faza 2: OpenMP
- 
+**OpenMP:**
 - paralelna petlja po agentima i paralelna izgradnja mreže (lokalni histogrami po nitima, pa prefix sum),
 - poređenje `static`, `dynamic` i `guided` rasporeda na rijetkim i gustim scenarijima,
 - sortiranje agenata po ćeliji radi lokalnosti keša, uz kontrolu false sharinga,
-- opcionalno vektorizacija računanja sila (`omp simd`, AVX2).
-### Faza 3: CUDA
- 
-- kernel za ćeliju svakog agenta, sortiranje po ćeliji (Thrust ili CUB), kernel za granice ćelija, kernel za sile i integraciju,
+- opcionalno vektorizacija (`omp simd`, AVX2).
+**CUDA:**
+- kernel za ćeliju svakog agenta, sortiranje po ćeliji (Thrust ili CUB), kernel za granice ćelija, kernel za top-k i ORCA,
 - podaci ostaju na GPU-u, a kopiranje na CPU služi samo za izlaz,
 - analiza veličine bloka, coalescing-a, divergencije u gustim ćelijama i occupancy-ja, uz profilisanje alatom Nsight.
-### Ulaz, izlaz i metrike
+
+
+## Struktura repozitorija
  
-Ulaz je scenarij (generisan sa fiksnim seedom ili učitan iz datoteke). Izlaz su pozicije agenata svakih `k` koraka i konačno stanje, a 2D vizualizacija čita taj izlaz i nije dio mjerenja. Pratimo vrijeme po koraku (izgradnja mreže, susjedi, sile), broj agent-koraka u sekundi, ubrzanje i efikasnost, broj preklapanja i vrijeme evakuacije.
-
+| Folder / fajl | Sadržaj |
+|---|---|
+| `include/` | headeri (`agents`, `grid`, `map`, `metrics`, `navfield`, `orca`, `params`, `scenario`, `sim`; `.hpp`) |
+| `src/` | implementacija (`grid`, `map`, `metrics`, `navfield`, `orca`, `main`; `.cpp`) |
+| `tests/` | testovi: mreža, mapa, ORCA, simulacija i validacija |
+| `maps/` | ASCII mape za benchmark po mapi |
+| `scripts/` | pomoćne skripte (`run_bench.ps1` pokreće benchmark i dopisuje rezultate u CSV) |
+| `results/` | rezultati mjerenja (`bench.csv`) |
+| `docs/` | literatura i bilješke |
+| `CMakeLists.txt` | build konfiguracija |
+ 
+Generisani folderi (`build/`, `build-prof/`, `build-diag/`, `.vs/`) i izlaz alata za profilisanje (Intel VTune) nisu dio repozitorija i nalaze se u `.gitignore`.
+ 
+## Izgradnja i pokretanje
+ 
+Zahtjevi: C++ kompajler sa podrškom za C++20 i OpenMP, CMake, CUDA Toolkit (za GPU verziju, kad bude dostupna), Python 3 sa `matplotlib` (za grafikone). Za vizualizaciju se koristi biblioteka raylib, koju CMake preuzima sam. <!-- TODO: potvrditi -->
+ 
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+```
+ 
+Mjerenja imaju smisla samo u **Release** konfiguraciji.
+ 
+### Testovi
+ 
+```bash
+ctest --test-dir build --output-on-failure
+```
+ 
+<!-- TODO: potvrditi da su testovi registrovani u CMake-u, inače navesti izvršne fajlove -->
+ 
+### Benchmark
+ 
+Benchmark bez mape koristi scenarij antipodalnog diska (broj u argumentu je broj ponavljanja):
+ 
+```bash
+./build/crowd_bench
+./build/crowd_bench 10
+```
+ 
+Benchmark jedne ASCII mape koristi `--map <fajl> [N] [ponavljanja]`:
+ 
+```bash
+./build/crowd_bench --map maps/labirint.txt
+./build/crowd_bench --map maps/vrata.txt 500 5
+```
+ 
+Bez `N` koriste se četiri veličine proporcionalne mapi: `slobodno/8`, `slobodno/4`, `slobodno/2` i `slobodno`. Ako navedeš `N`, benchmarkuje se samo ta jedna veličina. Za svaku mapu pokreće se isti benchmark: 20 koraka zagrijavanja i 100 mjerenih koraka.
+ 
+### Benchmark sa CSV izlazom (Windows, PowerShell)
+ 
+```powershell
+.\scripts\run_bench.ps1 -Label "naziv-eksperimenta" -Repeats 7
+```
+ 
+Skripta pokreće `build\crowd_bench.exe` i rezultate sprema u `results\bench.csv` uz zadanu oznaku (`--label`). Za svaku optimizaciju koristi drugu oznaku da se rezultati ne miješaju.
+ 
 ## Mjerenja
-
-Predložene veličine skupova:
-
-- Broj agenata N ∈ {1.000, 10.000, 100.000}, na GPU-u i više, u skladu sa memorijom.
+ 
+Veličine skupova:
+ 
+- Broj agenata N ∈ {1.000, 5.000, 10.000, 20.000} u trenutnim mjerenjima; planirano i 100.000, na GPU-u i više, u skladu sa memorijom.
 - Broj niti ∈ {1, 2, 4, 8, ...}, u skladu sa dostupnim hardverom.
-- Scenariji iz tabele iznad, uz različite gustine.
-
+- Scenariji: antipodalni disk i ASCII mape, uz različite gustine.
 Porede se:
-
+ 
 1. Sekvencijalna naivna verzija.
 2. Sekvencijalna verzija sa prostornom mrežom.
 3. OpenMP verzije (različiti rasporedi, sa i bez sortiranja agenata po ćeliji).
 4. CUDA verzija.
-
 Metrike:
-
-- Vrijeme izgradnje mreže, vrijeme traženja susjeda i računanja brzine, ukupno vrijeme po koraku.
+ 
+- Vrijeme izgradnje mreže, vrijeme top-k pretrage, vrijeme ORCA-e i ukupno vrijeme po koraku.
+- Vrijeme po agentu (`us/agent`) i prosječan broj susjeda (`avg_nb`).
 - Broj agent-koraka u sekundi.
 - Ubrzanje: `S = T_seq / T_par`.
 - Paralelna efikasnost: `E = S / broj_niti`.
 - Strong scaling (isti N, više niti) i weak scaling (N raste sa brojem niti).
 - Na GPU-u: vrijeme kernela i vrijeme prenosa podataka host-device mjere se odvojeno.
 - Raspodjela broja susjeda po agentu (histogram) kao pokazatelj neravnomjernosti posla.
-
 Ubrzanje paralelne verzije sa mrežom mjeri se u odnosu na **sekvencijalnu verziju sa mrežom**, kako bi se razdvojio doprinos paralelizacije od doprinosa same prostorne strukture.
-
-Mjerenja se ponavljaju više puta, uz zagrijavanje, a uzima se medijan. Mjeri se samo simulacija (bez vizualizacije i učitavanja podataka).
-
-## Izgradnja i pokretanje
-
-> Naredbe će se dopuniti kada implementacija bude dostupna.
-
-```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-```
-
-Očekivani zahtjevi: C++ kompajler sa podrškom za OpenMP, CMake, CUDA Toolkit (za GPU verziju), Python 3 sa `matplotlib` (za vizualizaciju i grafikone).
-
-Benchmark bez mape koristi antipodalni disk:
-
-```bash
-./build/crowd_bench
-./build/crowd_bench 10
-```
-
-Benchmark jedne ASCII mape koristi `--map <fajl> [N] [ponavljanja]`:
-
-```bash
-./build/crowd_bench --map maps/labirint.txt
-./build/crowd_bench --map maps/vrata.txt 500 5
-```
-
-Bez `N` koriste se četiri veličine proporcionalne mapi:
-`slobodno/8`, `slobodno/4`, `slobodno/2` i `slobodno`. Ako navedeš `N`,
-benchmarkuje se samo ta jedna veličina. Za svaku mapu pokreće se isti
-benchmark: 20 koraka zagrijavanja i 100 mjerenih koraka.
+ 
+Mjerenja se ponavljaju više puta (7 ponavljanja), uz zagrijavanje od 20 koraka (mjere se koraci 21 do 120), a uzima se medijan. Mjeri se samo simulacija (bez vizualizacije i učitavanja podataka).
 
 ## Pojmovi i skraćenice
 
