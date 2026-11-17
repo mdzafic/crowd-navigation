@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <string>
+#include <vector>
 #include "map.hpp"
 #include "metrics.hpp"
 #include "raylib.h"
@@ -65,8 +66,10 @@ int main(int argc, char** argv)
     const Map* mp = map_sim ? &map : nullptr;
     Sim sim(sc.agents, sc.world, p, mp);
 
-    const int W = 1280, H = 800;
-    InitWindow(W, H, "crowd_viz");
+    // prozor promjenjive velicine, odmah maksimiziran; F11 = fullscreen bez okvira
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+    InitWindow(1280, 800, "crowd_viz");
+    MaximizeWindow();
     SetTargetFPS(60);
 
     float min_x = sc.world.min_x, max_x = sc.world.max_x;
@@ -77,37 +80,73 @@ int main(int argc, char** argv)
         max_x = map.widthWorld(); max_y = map.heightWorld();
     }
 
-    Camera2D cam{};
-    cam.offset = {W / 2.f, H / 2.f};
-    cam.target = {(min_x + max_x) / 2.f, (min_y + max_y) / 2.f};
-    const float ext = std::max(max_x - min_x, max_y - min_y);
-    cam.zoom = 0.9f * std::min(W, H) / ext;
-    const Camera2D cam0 = cam;
+    // kamera koja uklapa cijeli svijet u trenutnu velicinu prozora
+    auto fit_camera = [&]() {
+        const float sw = static_cast<float>(GetScreenWidth());
+        const float sh = static_cast<float>(GetScreenHeight());
+        Camera2D c{};
+        c.offset = {sw / 2.f, sh / 2.f};
+        c.target = {(min_x + max_x) / 2.f, (min_y + max_y) / 2.f};
+        c.zoom = 0.92f * std::min(sw / (max_x - min_x), sh / (max_y - min_y));
+        return c;
+    };
+    Camera2D cam = fit_camera();
+    bool cam_user = false;   // korisnik je pomjerao/zumirao -> ne refitaj na resize
 
     bool paused = false, show_goals = false, show_segments = true, show_field = false;
+    bool show_markers = false;   // C: markeri ciljeva + oznaka agenata koji su stigli
     int steps_per_frame = 1;
+    long long steps_done = 0;   // broj odradjenih koraka simulacije (za HUD)
+    long long finish_step = -1; // korak u kojem su svi stigli na cilj (-1 = jos nisu)
+
+    // T: tragovi putanja, kruzni bafer zadnjih TRAIL_LEN pozicija po agentu
+    bool show_trails = false;
+    constexpr int TRAIL_LEN = 40;
+    std::vector<Vector2> trail(sim.state().size() * TRAIL_LEN);
+    int trail_head = 0, trail_count = 0;
+    auto record_trail = [&]() {
+        const Agents& s = sim.state();
+        for (std::size_t i = 0; i < s.size(); ++i)
+            trail[i * TRAIL_LEN + trail_head] = {s.x[i], s.y[i]};
+        trail_head = (trail_head + 1) % TRAIL_LEN;
+        trail_count = std::min(trail_count + 1, TRAIL_LEN);
+    };
+    record_trail();
 
     while (!WindowShouldClose())
     {
         // ---- ulaz ----
         if (IsKeyPressed(KEY_SPACE)) paused = !paused;
         if (IsKeyPressed(KEY_G)) show_goals = !show_goals;
+        if (IsKeyPressed(KEY_C)) show_markers = !show_markers;
         if (IsKeyPressed(KEY_L)) show_segments = !show_segments;
         if (IsKeyPressed(KEY_F)) show_field = !show_field;
         if (IsKeyPressed(KEY_UP))   steps_per_frame = std::min(steps_per_frame * 2, 64);
         if (IsKeyPressed(KEY_DOWN)) steps_per_frame = std::max(steps_per_frame / 2, 1);
-        if (IsKeyPressed(KEY_HOME)) cam = cam0;
-        if (IsKeyPressed(KEY_R))    { sim = Sim(sc.agents, sc.world, p, mp); paused = true; }
+        if (IsKeyPressed(KEY_HOME)) { cam = fit_camera(); cam_user = false; }
+        if (IsKeyPressed(KEY_R))    { sim = Sim(sc.agents, sc.world, p, mp); paused = true; steps_done = 0; finish_step = -1; trail_count = 0; record_trail(); }
+        if (IsKeyPressed(KEY_T))    show_trails = !show_trails;
+        if (IsKeyPressed(KEY_F11))  ToggleBorderlessWindowed();
+
+        if (IsWindowResized())
+        {
+            if (cam_user)
+                cam.offset = {GetScreenWidth() / 2.f, GetScreenHeight() / 2.f};
+            else
+                cam = fit_camera();
+        }
 
         if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
         {
             Vector2 d = GetMouseDelta();
             cam.target.x -= d.x / cam.zoom;
             cam.target.y -= d.y / cam.zoom;
+            if (d.x != 0.f || d.y != 0.f) cam_user = true;
         }
         float wheel = GetMouseWheelMove();
         if (wheel != 0.f)
         {
+            cam_user = true;
             Vector2 before = GetScreenToWorld2D(GetMousePosition(), cam);
             cam.zoom = std::clamp(cam.zoom * (1.f + 0.15f * wheel), 0.5f, 200.f);
             Vector2 after = GetScreenToWorld2D(GetMousePosition(), cam);
@@ -118,10 +157,20 @@ int main(int argc, char** argv)
         // ---- simulacija; u map modu se ne pokrece ----
         if (!map_mode)
         {
-            if (!paused)
-                for (int k = 0; k < steps_per_frame; ++k) sim.step();
-            else if (IsKeyPressed(KEY_RIGHT))
+            int steps = !paused ? steps_per_frame : (IsKeyPressed(KEY_RIGHT) ? 1 : 0);
+            for (int k = 0; k < steps; ++k)
+            {
                 sim.step();
+                ++steps_done;
+                record_trail();
+                // svi stigli prvi put -> automatska pauza, vrijeme ostaje zamrznuto
+                if (finish_step < 0 && goalReachedCount(sim.state(), 0.25f) == sim.state().size())
+                {
+                    finish_step = steps_done;
+                    paused = true;
+                    break;
+                }
+            }
         }
 
         // ---- crtanje ----
@@ -167,33 +216,132 @@ int main(int argc, char** argv)
 
         if (!map_mode)
         {
+            const float r = p.radius;
+
+            // tragovi putanja: od najstarije (providno) do najnovije pozicije
+            if (show_trails && trail_count > 1)
+                for (std::size_t i = 0; i < a.size(); ++i)
+                {
+                    Color c = color_for_goal(sc.agents.x[i], sc.agents.y[i],
+                                             a.gx[i], a.gy[i]);
+                    const int start = (trail_head - trail_count + TRAIL_LEN) % TRAIL_LEN;
+                    for (int k = 1; k < trail_count; ++k)
+                    {
+                        const Vector2 p0 = trail[i * TRAIL_LEN + (start + k - 1) % TRAIL_LEN];
+                        const Vector2 p1 = trail[i * TRAIL_LEN + (start + k) % TRAIL_LEN];
+                        const float t = static_cast<float>(k) / trail_count;
+                        DrawLineEx(p0, p1, 0.25f * r, Fade(c, 0.5f * t));
+                    }
+                }
+
+            // markeri ciljeva (ispod agenata): prsten + krstic u boji agenta
+            if (show_markers)
+                for (std::size_t i = 0; i < a.size(); ++i)
+                {
+                    Color c = color_for_goal(sc.agents.x[i], sc.agents.y[i],
+                                             a.gx[i], a.gy[i]);
+                    const Vector2 g = {a.gx[i], a.gy[i]};
+                    DrawRing(g, 0.55f * r, 0.75f * r, 0.f, 360.f, 24, Fade(c, 0.8f));
+                    DrawLineEx({g.x - 0.4f * r, g.y}, {g.x + 0.4f * r, g.y}, 0.12f * r, Fade(c, 0.8f));
+                    DrawLineEx({g.x, g.y - 0.4f * r}, {g.x, g.y + 0.4f * r}, 0.12f * r, Fade(c, 0.8f));
+                }
+
             for (std::size_t i = 0; i < a.size(); ++i)
             {
                 Color c = color_for_goal(sc.agents.x[i], sc.agents.y[i],
                                          a.gx[i], a.gy[i]);
-                if (show_goals)
+                const float dx = a.gx[i] - a.x[i], dy = a.gy[i] - a.y[i];
+                const bool arrived = dx * dx + dy * dy < 0.25f * 0.25f;
+                if (show_goals && !arrived)
                     DrawLineV({a.x[i], a.y[i]}, {a.gx[i], a.gy[i]}, Fade(c, 0.15f));
-                DrawCircleV({a.x[i], a.y[i]}, p.radius, c);
+                if (arrived && show_markers)
+                {
+                    // stigao: zatamnjen agent sa bijelim obrubom
+                    DrawCircleV({a.x[i], a.y[i]}, r, Fade(c, 0.35f));
+                    DrawRing({a.x[i], a.y[i]}, 0.85f * r, r, 0.f, 360.f, 24, Fade(RAYWHITE, 0.7f));
+                }
+                else
+                    DrawCircleV({a.x[i], a.y[i]}, r, c);
             }
         }
         EndMode2D();
 
+        // ---- HUD ----
+        const int sw = GetScreenWidth(), sh = GetScreenHeight();
+        const Color bar_bg = {10, 10, 14, 200};
+
+        // donja traka: [tipka] opis; ukljucene opcije svijetle, iskljucene sive,
+        // obicne komande (bez stanja) srednje sive. Prelama se ako ne stane.
+        struct KeyItem { const char* key; const char* label; int state; }; // -1 = komanda
+        auto draw_key_bar = [&](const std::vector<KeyItem>& items) {
+            const int fs = 16, pad = 8, gap = 18, line_h = fs + 6;
+            int lines = 1, x = pad;
+            for (const KeyItem& it : items)
+            {
+                const int wdt = MeasureText(TextFormat("[%s] %s", it.key, it.label), fs);
+                if (x + wdt > sw - pad && x > pad) { ++lines; x = pad; }
+                x += wdt + gap;
+            }
+            const int bar_h = lines * line_h + pad;
+            DrawRectangle(0, sh - bar_h, sw, bar_h, bar_bg);
+            x = pad;
+            int y = sh - bar_h + pad / 2 + 3;
+            for (const KeyItem& it : items)
+            {
+                const char* txt = TextFormat("[%s] %s", it.key, it.label);
+                const int wdt = MeasureText(txt, fs);
+                if (x + wdt > sw - pad && x > pad) { x = pad; y += line_h; }
+                const Color col = it.state == 1 ? Color{255, 214, 90, 255}
+                                : it.state == 0 ? Color{95, 95, 105, 255}
+                                                : Color{160, 160, 170, 255};
+                DrawText(txt, x, y, fs, col);
+                x += wdt + gap;
+            }
+        };
+
         if (map_mode)
         {
-            DrawText(TextFormat("mapa %dx%d  segmenata=%zu  FPS=%d",
+            DrawRectangle(0, 0, sw, 36, bar_bg);
+            DrawText(TextFormat("mapa %dx%d   segmenata %zu   %d FPS",
                                 map.w, map.h, map.segments.size(), GetFPS()),
-                     10, 10, 20, RAYWHITE);
-            DrawText("L konture zidova | HOME kamera | tocak zoom | LMB pan",
-                     10, H - 24, 16, GRAY);
+                     10, 8, 20, RAYWHITE);
+            draw_key_bar({{"L", "konture zidova", show_segments ? 1 : 0},
+                          {"HOME", "kamera", -1}, {"F11", "fullscreen", -1},
+                          {"tocak", "zoom", -1}, {"LMB", "pan", -1}});
         }
         else
         {
-            DrawText(TextFormat("N=%zu  preklapanja=%zu  min udaljenost=%.2f  na cilju=%zu  FPS=%d",
-                                a.size(), overlapCount(a, p.radius), minPairDistance(a),
-                                goalReachedCount(a, 0.25f), GetFPS()),
-                     10, 10, 20, RAYWHITE);
-            DrawText("SPACE pauza | RIGHT korak | UP/DOWN brzina | G ciljevi | F polje | L zidovi | R reset | HOME kamera | tocak zoom | LMB pan",
-                     10, H - 24, 16, GRAY);
+            const std::size_t reached = goalReachedCount(a, 0.25f);
+            DrawRectangle(0, 0, sw, 58, bar_bg);
+            DrawText(TextFormat("t = %.1f s     korak %lld     brzina x%d",
+                                steps_done * p.dt, steps_done, steps_per_frame),
+                     10, 8, 20, RAYWHITE);
+            DrawText(TextFormat("N=%zu    na cilju %zu/%zu    preklapanja %zu    min udalj. %.2f    %d FPS",
+                                a.size(), reached, a.size(), overlapCount(a, p.radius),
+                                minPairDistance(a), GetFPS()),
+                     10, 33, 18, Color{180, 180, 190, 255});
+            if (finish_step >= 0)
+            {
+                const char* dtxt = TextFormat("SVI NA CILJU za %.1f s", finish_step * p.dt);
+                const int dw = MeasureText(dtxt, 22);
+                DrawText(dtxt, sw - dw - 16, 18, 22, Color{120, 220, 120, 255});
+            }
+            else if (paused)
+            {
+                const char* ptxt = "|| PAUZA";
+                const int pw = MeasureText(ptxt, 24);
+                DrawText(ptxt, sw - pw - 16, 17, 24, Color{255, 200, 40, 255});
+            }
+            draw_key_bar({{"SPACE", "pauza", -1}, {"RIGHT", "korak", -1},
+                          {"UP/DOWN", "brzina", -1},
+                          {"G", "linije", show_goals ? 1 : 0},
+                          {"C", "ciljevi", show_markers ? 1 : 0},
+                          {"T", "tragovi", show_trails ? 1 : 0},
+                          {"F", "polje", show_field ? 1 : 0},
+                          {"L", "zidovi", show_segments ? 1 : 0},
+                          {"R", "reset", -1}, {"HOME", "kamera", -1},
+                          {"F11", "fullscreen", -1}, {"tocak", "zoom", -1},
+                          {"LMB", "pan", -1}});
         }
         EndDrawing();
     }
